@@ -106,6 +106,7 @@ struct AboutView: View {
                         Text("Ağ paketlerinizi parçalayarak engelleri aşar. Trafiğiniz şifrelenmez veya başka bir sunucuya yönlendirilmez. %0 hız kaybıyla en yüksek performansı sunar.")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 
@@ -120,6 +121,7 @@ struct AboutView: View {
                         Text("Cloudflare altyapısını kullanarak tüm trafiğinizi aşılmaz ve şifreli bir tünelden geçirir. IP bazlı devasa banları aşar, sizi tamamen anonimleştirir.")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
