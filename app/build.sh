@@ -16,7 +16,7 @@ swiftc -O \
     -sdk "$SDK_PATH" \
     -target "$TARGET" \
     -framework Cocoa \
-    main.swift \
+    *.swift \
     -o "$BUILD_DIR/${APP_NAME}"
 
 echo "[2/4] .app bundle olusturuluyor..."

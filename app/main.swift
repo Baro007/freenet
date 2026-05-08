@@ -1,4 +1,5 @@
 import Cocoa
+import SwiftUI
 
 // freenet — Hibrit DPI ve Tünel Yönetimi
 
@@ -23,6 +24,9 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var currentIPInfo = "Mevcut IP: Denetleniyor..."
     
     private var ciadpiProcess: Process?
+    
+    private var settingsWindow: NSWindow?
+    private var dashboardWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -30,6 +34,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         
         let savedMode = UserDefaults.standard.string(forKey: "freenetMode") ?? Mode.dpi.rawValue
         currentMode = Mode(rawValue: savedMode) ?? .dpi
+        
+        // Başlatmada kalan proxy'yi temizle (Force Quit koruması)
+        cleanupOrphanedProxy()
         
         updateIcon()
         rebuildMenu()
@@ -43,6 +50,23 @@ final class AppController: NSObject, NSApplicationDelegate {
             self?.fetchIP()
         }
         fetchIP()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if isOn {
+            if currentMode == .dpi { stopDPI() }
+            else { stopWARP() }
+        }
+    }
+
+    private func cleanupOrphanedProxy() {
+        let ciadpiRunning = (ciadpiProcess?.isRunning == true)
+        if !ciadpiRunning && checkProxyOn() {
+            let interfaces = ["Wi-Fi", "Ethernet"]
+            for iface in interfaces {
+                _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxystate", iface, "off"])
+            }
+        }
     }
 
     private func fetchIP() {
@@ -79,8 +103,16 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     @objc private func installSudoers() {
+        let user = NSUserName()
+        let rules = [
+            "\(user) ALL=(ALL) NOPASSWD: \(networksetupPath) -setsocksfirewallproxy *",
+            "\(user) ALL=(ALL) NOPASSWD: \(networksetupPath) -setsocksfirewallproxystate *",
+            "\(user) ALL=(ALL) NOPASSWD: \(wgQuickPath) up wgcf",
+            "\(user) ALL=(ALL) NOPASSWD: \(wgQuickPath) down wgcf"
+        ]
+        let content = rules.joined(separator: "\n")
         let script = """
-        echo "\(NSUserName()) ALL=(ALL) NOPASSWD: \(wgQuickPath), \(networksetupPath)" > /tmp/freenet_sudoers
+        echo '\(content)' > /tmp/freenet_sudoers
         chmod 440 /tmp/freenet_sudoers
         chown root:wheel /tmp/freenet_sudoers
         mv /tmp/freenet_sudoers /etc/sudoers.d/freenet
@@ -187,6 +219,16 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
 
         menu.addItem(NSMenuItem.separator())
+        
+        let dashboardItem = NSMenuItem(title: "Canlı Dashboard...", action: #selector(showDashboard), keyEquivalent: "d")
+        dashboardItem.target = self
+        menu.addItem(dashboardItem)
+        
+        let settingsItem = NSMenuItem(title: "Ayarlar...", action: #selector(showSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        menu.addItem(NSMenuItem.separator())
 
         let about = NSMenuItem(title: "Hakkında…", action: #selector(showAbout), keyEquivalent: "")
         about.target = self
@@ -243,6 +285,40 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
     
+    @objc private func showSettings() {
+        if settingsWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered, defer: false)
+            window.title = "Freenet Ayarları"
+            window.center()
+            window.setFrameAutosaveName("SettingsWindow")
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: SettingsView())
+            settingsWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func showDashboard() {
+        if dashboardWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered, defer: false)
+            window.title = "Freenet Canlı Dashboard"
+            window.center()
+            window.setFrameAutosaveName("DashboardWindow")
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: DashboardView())
+            dashboardWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        dashboardWindow?.makeKeyAndOrderFront(nil)
+    }
+    
     private func startDPI() {
         let ciadpiPath = Bundle.main.bundlePath + "/Contents/Resources/bin/ciadpi"
         let chmodTask = Process()
@@ -253,20 +329,56 @@ final class AppController: NSObject, NSApplicationDelegate {
         
         ciadpiProcess = Process()
         ciadpiProcess?.executableURL = URL(fileURLWithPath: ciadpiPath)
-        // Use optimal bypass arguments
-        ciadpiProcess?.arguments = ["-d", "1", "-p", "1080"]
-        try? ciadpiProcess?.run()
+        
+        let dpiArgsStr = UserDefaults.standard.string(forKey: "dpiArgs") ?? "-d 1 -p 1080"
+        let args = dpiArgsStr.components(separatedBy: " ").filter { !$0.isEmpty }
+        ciadpiProcess?.arguments = args
+        
+        // Port'u argümanlardan parse et (varsayılan: 1080)
+        var proxyPort = "1080"
+        if let pIdx = args.firstIndex(of: "-p"), pIdx + 1 < args.count {
+            proxyPort = args[pIdx + 1]
+        }
+        
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        ciadpiProcess?.standardOutput = outPipe
+        ciadpiProcess?.standardError = errPipe
+        
+        let logHandler: (FileHandle) -> Void = { fileHandle in
+            let data = fileHandle.availableData
+            if data.isEmpty { return }
+            if let string = String(data: data, encoding: .utf8) {
+                let lines = string.components(separatedBy: .newlines)
+                for line in lines where !line.isEmpty {
+                    LogManager.shared.appendLog(line)
+                }
+            }
+        }
+        outPipe.fileHandleForReading.readabilityHandler = logHandler
+        errPipe.fileHandleForReading.readabilityHandler = logHandler
+        
+        LogManager.shared.appendLog("--- ciadpi başlatılıyor (\(dpiArgsStr)) ---")
+        do {
+            try ciadpiProcess?.run()
+        } catch {
+            showError(detail: "DPI motoru başlatılamadı: \(error.localizedDescription)")
+            return
+        }
         
         let primaryInterfaces = ["Wi-Fi", "Ethernet"]
         for interface in primaryInterfaces {
-            _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxy", interface, "127.0.0.1", "1080"])
+            _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxy", interface, "127.0.0.1", proxyPort])
             _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxystate", interface, "on"])
         }
     }
     
     private func stopDPI() {
+        (ciadpiProcess?.standardOutput as? Pipe)?.fileHandleForReading.readabilityHandler = nil
+        (ciadpiProcess?.standardError as? Pipe)?.fileHandleForReading.readabilityHandler = nil
         ciadpiProcess?.terminate()
         ciadpiProcess = nil
+        LogManager.shared.appendLog("--- ciadpi durduruldu ---")
         
         // Ensure proxy is killed
         let killTask = Process()
