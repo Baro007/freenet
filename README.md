@@ -56,13 +56,9 @@ open /Applications/freenet.app
 
 ---
 
-## 🤝 Katkıda Bulunma
+## 🤝 Krediler ve Teşekkürler
 
-Bu proje Karpathy prensiplerine ("Simplicity First", "Goal-Driven") sıkı sıkıya bağlı kalarak "over-engineering" olmadan kodlanmıştır.
-
-Kodlarda bir şeyler geliştirmek isterseniz:
-1. `app/main.swift` dosyasını Xcode veya dilediğiniz bir editörle açın.
-2. Basitliği koruyarak değişikliklerinizi yapın.
-3. Pull Request gönderin!
-
-*(Bu proje, temelini oluşturan açık kaynaklı `ciadpi` ve `WireGuard` projelerine teşekkür eder.)*
+Freenet, açık interneti savunan aşağıdaki özgür yazılım projelerinin omuzlarında yükselmektedir:
+- [ciadpi (ByeDPI)](https://github.com/hufrea/byedpi) - DPI atlatma motoru.
+- [WireGuard](https://www.wireguard.com/) & [Cloudflare WARP](https://1.1.1.1/) - Tünel altyapısı.
+- [GoodbyeDPI-Turkey](https://github.com/cagritaskn/GoodbyeDPI-Turkey) & [SplitWire-Turkey](https://github.com/a-mertdincer/SplitWire-Turkey-macOS) - İlham alınan topluluk projeleri.
