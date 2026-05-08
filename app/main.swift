@@ -289,10 +289,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             }
             
             DispatchQueue.main.async {
+                self.isOn = self.checkTunnelUp()
                 self.isTransitioning = false
-                self.refreshStatus()
                 self.updateIcon()
                 self.rebuildMenu()
+                self.fetchIP()
             }
         }
     }
