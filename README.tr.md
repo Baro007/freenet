@@ -1,64 +1,66 @@
 # 🛡️ Freenet (macOS)
 
-**Freenet**, Türkiye'deki internet sansürlerini ve IP bloklamalarını aşmak için geliştirilmiş, tamamen açık kaynaklı ve dışa bağımsız bir **Hibrit (DPI + Tünel)** macOS menü çubuğu uygulamasıdır. 
+<p align="center">
+  <img src="assets/banner.png" alt="Freenet Afiş" width="100%">
+</p>
 
-Windows tarafındaki efsanevi GoodbyeDPI mimarisinden ilham alınarak macOS'a uyarlanmıştır. Herhangi bir üyelik, kayıt veya ücret gerektirmez.
+<p align="center">
+  <a href="https://img.shields.io/badge/Platform-macOS%2013.0+-apple?style=flat-square&logo=apple"><img src="https://img.shields.io/badge/Platform-macOS%2013.0+-apple?style=flat-square&logo=apple"></a>
+  <a href="https://img.shields.io/badge/Swift-5.0-orange?style=flat-square&logo=swift"><img src="https://img.shields.io/badge/Swift-5.0-orange?style=flat-square&logo=swift"></a>
+  <a href="https://img.shields.io/badge/License-MIT-green?style=flat-square"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square"></a>
+</p>
 
----
+<h3 align="center">Sansürü aşın. Hesap yok. Abonelik yok. Sadece tıklayın.</h3>
 
-## ✨ Özellikler
+Freenet, macOS için özel olarak Swift ile geliştirilmiş, **sıfır ayar** gerektiren hibrit bir internet özgürlüğü aracıdır. Efsanevi GoodbyeDPI projesinden ilham alınarak Mac menü çubuğuna (menubar) kusursuzca entegre edilmiştir. 
 
-Freenet, sansür yöntemlerine karşı iki farklı motor (mod) sunar:
-
-### 1. 🚀 DPI Modu (Yerel Motor - ciadpi)
-* **Nasıl Çalışır:** Arka planda SOCKS5 tabanlı yerel bir proxy açarak (127.0.0.1:1080) paketlerinizi parçalar. İnternet servis sağlayıcınızın koyduğu SNI (Server Name Indication) filtrelerini aşmanızı sağlar.
-* **Avantajı:** Hiçbir dış sunucuya (VPN'e) bağlanmaz! Trafiğiniz doğrudan hedefe gider. Bu nedenle **hız kaybı sıfırdır**. YouTube, X (Twitter) gibi DPI sansürü olan sitelere tam hızda girersiniz.
-* **Not:** Anonimlik sağlamaz. Sadece sansürü deler.
-
-### 2. 🌍 Tünel Modu (WARP - wg-quick)
-* **Nasıl Çalışır:** Eğer erişmek istediğiniz site (Örn: Discord) DPI filtresiyle değil de **doğrudan IP engellemesi** ile kapatılmışsa, DPI motoru işe yaramaz. Bu durumda menüden "Tünel Modu"nu seçersiniz. Sistem tamamen ücretsiz olan Cloudflare WARP ağı üzerinden WireGuard tüneli kurar.
-* **Avantajı:** Gerçek kimliğinizi ve IP'nizi yurt dışına taşır. Tüm engelleri kesin olarak aşar.
-
-### ⚡️ Şifresiz Tek Tıkla Geçiş (Sudoers IPC)
-VPN ve DPI araçları macOS'ta `sudo` (Yönetici) izni gerektirir. Freenet, ilk açılışta sizden bir kereye mahsus izin isteyerek sisteminize özel ve güvenli bir `sudoers` dosyası kurar. Artık menüden sadece tek tıkla **sıfır saniyede ve şifre girmeden** modlar arası geçiş yapabilirsiniz.
+🇬🇧 **[Click here for English Documentation](README.md)**
 
 ---
 
-## 📦 Kolay Kurulum
+## ✨ Neden Freenet? (Nasıl Çalışır?)
 
-Uygulamayı Mac'inize yüklemek için Terminal'i (Uygulamalar > İzlenceler > Terminal) açın ve aşağıdaki komutları sırasıyla yapıştırıp `Enter`'a basın:
+Sansür sistemleri tek tip değildir. Freenet, karşılaştığınız engele göre kullanabileceğiniz iki farklı motor sunar:
+
+### 1. 🚀 DPI Modu (Hız ve Performans Odaklı)
+*   **Sorun:** Türkiye'deki sansür sistemi genellikle bir kargocu (İSS) gibi çalışır. Paketin üstünde "yasaklisite.com" yazıyorsa kargoyu çöpe atar (DPI - Derin Paket İncelemesi).
+*   **Çözüm:** Freenet DPI modunu açtığınızda arka planda paketinizin üzerindeki yazıyı jiletle keser. "yasak" ve "lisite.com" olarak iki ayrı parça halinde gönderir. İSS'nin filtreleri bu kopuk parçaları okuyamadığı için paketin geçişine izin verir.
+*   **Sihir:** Trafiğiniz hiçbir aracı sunucuya (VPN'e) gitmez! Bağlantınız doğrudan karşı tarafadır. Bu yüzden **%0 hız kaybı** yaşarsınız. Hız testiniz 100 Mbps ise, yasaklı siteye de 100 Mbps ile girersiniz. *(Not: IP adresiniz gizlenmez, sadece sansürü atlatır).*
+
+### 2. 🌍 WARP Tünel Modu (Ağır Zırhlı Mod)
+*   **Sorun:** Bazen devletler sadece isimden değil, sitenin doğrudan adresinden (IP Ban) engelleme yapar. Bu durumda kargo etiketini parçalamak işe yaramaz.
+*   **Çözüm:** Freenet, dünyanın en büyük internet altyapılarından biri olan Cloudflare sunucularına doğrudan şifreli bir "boru" (WireGuard Tüneli) döşer. Sizin tüm trafiğiniz bu aşılmaz borunun içinden geçer.
+*   **Sihir:** IP banlı siteleri anında açar. Sizi anonim yapar (IP adresiniz Cloudflare'in IP'si gibi görünür). Ortak Wi-Fi ağlarında sizi bilgisayar korsanlarından korur.
+
+---
+
+## 🎩 Freenet'in "Sihirli" Özellikleri
+
+Freenet sadece bir komut aracı değil, Mac'inizin yerleşik bir parçası gibi hissettiren bir otopilottur.
+
+*   **⚡ Sıfır Sürtünme Kurulum:** Yeni bir kullanıcı "Tünel Modu"na ilk bastığında, Freenet arkada sessizce gerekli programları (Homebrew, wireguard) indirir, Cloudflare'e bağlanıp ücretsiz profil oluşturur. Sizin Terminal'e tek bir kod yazmanıza gerek kalmaz.
+*   **🔓 Şifresiz Geçiş (Tek Tık):** Normalde ağ ayarlarını değiştirmek Mac'te sürekli şifre ister. Freenet, ilk kurulumda sisteme güvenli bir izin bırakır. Artık VPN açıp kapatmak saniyeler sürer, asla şifre sormaz.
+*   **🧠 Kendi Kendini İyileştirme (Self-Healing):** Mac'in kapağını kapattınız veya Wi-Fi ağı değiştirdiniz ve bağlantı koptu mu? Freenet bunu saliseler içinde fark edip Tünel'i kendi kendine yeniden başlatır. Asla internetsiz kalmazsınız.
+*   **📊 Canlı Dashboard:** Teknik detayları sevenler için arkada paketlerin nasıl parçalandığını gösteren "Matrix" tarzı canlı bir log ekranı sunar.
+
+---
+
+## 📦 Tek Komutla Kurulum
+
+Freenet'i kurmak için Mac'inizde Terminal'i (`Uygulamalar > İzlenceler > Terminal`) açın ve şu tek satır kodu yapıştırıp Enter'a basın:
 
 ```bash
-# 1. Projeyi bilgisayarınıza indirin
-git clone https://github.com/Baro007/freenet.git
-cd freenet/app
-
-# 2. Uygulamayı derleyin ve yükleyin
-./build.sh
-cp -R build/freenet.app /Applications/
-xattr -dr com.apple.quarantine /Applications/freenet.app
-
-# 3. Freenet'i başlatın
-open /Applications/freenet.app
+curl -fsSL https://raw.githubusercontent.com/Baro007/freenet/main/install.sh | bash
 ```
 
-*Not: Uygulama çalıştıktan sonra Mac'inizin üst sağ köşesinde (saatin yanında) küçük bir kalkan 🛡️ ikonu belirecektir.*
+*Bu komut uygulamayı indirecek, derleyecek ve `Uygulamalar` klasörünüze yerleştirip otomatik başlatacaktır.*
 
 ---
 
-## 🛠️ İlk Kullanım
-
-1. Kalkan ikonuna tıklayın.
-2. Açılan menüden **"Şifresiz Geçişi Aktif Et ⚡️"** seçeneğine tıklayın.
-3. Mac şifrenizi girin.
-4. Artık kalkan ikonuna basıp **AÇ / KAPAT** diyerek sansürsüz internetin keyfini çıkarabilirsiniz!
-5. **Bağlantı Modu** altından hız için `DPI`, gizlilik için `Tünel (WARP)` seçebilirsiniz. En üst kısımda IP adresinizin başarıyla değiştiğini görebilirsiniz.
-
----
-
-## 🤝 Krediler ve Teşekkürler
-
-Freenet, açık interneti savunan aşağıdaki özgür yazılım projelerinin omuzlarında yükselmektedir:
-- [ciadpi (ByeDPI)](https://github.com/hufrea/byedpi) - DPI atlatma motoru.
+## 🤝 Krediler ve İlham Kaynakları
+- [ciadpi (ByeDPI)](https://github.com/hufrea/byedpi) - Çekirdek DPI atlatma motoru.
 - [WireGuard](https://www.wireguard.com/) & [Cloudflare WARP](https://1.1.1.1/) - Tünel altyapısı.
-- [GoodbyeDPI-Turkey](https://github.com/cagritaskn/GoodbyeDPI-Turkey) & [SplitWire-Turkey](https://github.com/a-mertdincer/SplitWire-Turkey-macOS) - İlham alınan topluluk projeleri.
+- [GoodbyeDPI-Turkey](https://github.com/cagritaskn/GoodbyeDPI-Turkey) & [SplitWire-Turkey](https://github.com/a-mertdincer/SplitWire-Turkey-macOS) - Fikir ve ilham kaynakları.
+
+## 📝 Lisans
+MIT License. Detaylar için [LICENSE](LICENSE) dosyasına bakabilirsiniz.

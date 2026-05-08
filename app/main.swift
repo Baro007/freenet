@@ -602,21 +602,17 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showAbout() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 450, height: 450),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.center()
+        window.title = "Freenet Hakkında"
+        window.contentView = NSHostingView(rootView: AboutView())
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "freenet"
-        alert.informativeText = """
-        Türkiye İnternet Engel Atlatma Aracı (Hibrit)
-        
-        Modlar:
-        - DPI Modu: ByeDPI (ciadpi) ile SOCKS5 tabanlı (Hızlı, Anonim değil)
-        - Tünel Modu: Cloudflare WARP üzerinden WireGuard tabanlı (IP bloklarını aşar)
-
-        Açık Kaynak Geliştirme.
-        """
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Tamam")
-        alert.runModal()
     }
 
     @objc private func quitApp() {
