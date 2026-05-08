@@ -38,6 +38,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     
     private var settingsWindow: NSWindow?
     private var dashboardWindow: NSWindow?
+    private var aboutWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -602,16 +603,21 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showAbout() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 450, height: 450),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.center()
-        window.title = "Freenet Hakkında"
-        window.contentView = NSHostingView(rootView: AboutView())
-        window.makeKeyAndOrderFront(nil)
+        if aboutWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 450, height: 450),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            window.center()
+            window.title = "Freenet Hakkında"
+            window.contentView = NSHostingView(rootView: AboutView())
+            window.isReleasedWhenClosed = false
+            self.aboutWindow = window
+        }
+        
+        aboutWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
