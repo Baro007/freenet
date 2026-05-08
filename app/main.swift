@@ -151,7 +151,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         } else {
             let fullCmd = "\(cmd) " + args.joined(separator: " ")
             let escaped = fullCmd.replacingOccurrences(of: "\"", with: "\\\"")
-            let script = "export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin && do shell script \"\(escaped)\" with administrator privileges"
+            let script = "do shell script \"\(escaped)\" with administrator privileges"
             var err: NSDictionary?
             NSAppleScript(source: script)?.executeAndReturnError(&err)
             return err == nil
@@ -416,8 +416,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             
             if !fm.fileExists(atPath: brewPath) {
                 DispatchQueue.main.sync {
-                    showError(detail: "Homebrew bulunamadı. Lütfen önce https://brew.sh adresinden Homebrew yükleyin.")
+                    showInfo(detail: "Homebrew bulunamadı. Kurulum komutu Terminal'de otomatik açılacaktır. Lütfen Terminal'deki talimatları izleyip kurulum bittiğinde freenet'i tekrar çalıştırın.")
                 }
+                let script = "tell application \"Terminal\" to do script \"/bin/bash -c \\\"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\\\"\""
+                var err: NSDictionary?
+                NSAppleScript(source: script)?.executeAndReturnError(&err)
                 return false
             }
             
@@ -469,8 +472,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         
         let destConfig = "/etc/wireguard/wgcf.conf"
         if !fm.fileExists(atPath: destConfig) {
-            let cpCmd = "mkdir -p /etc/wireguard && cp '\(configPath)' '\(destConfig)' && chmod 600 '\(destConfig)'"
-            let script = "export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin && do shell script \"\(cpCmd)\" with administrator privileges"
+            let cpCmd = "/bin/mkdir -p /etc/wireguard && /bin/cp '\(configPath)' '\(destConfig)' && /bin/chmod 600 '\(destConfig)'"
+            let script = "do shell script \"\(cpCmd)\" with administrator privileges"
             var err: NSDictionary?
             NSAppleScript(source: script)?.executeAndReturnError(&err)
         }
@@ -483,7 +486,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             return
         }
         
-        let script = "export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin && do shell script \"\(wgQuickPath) up \(tunnelName)\" with administrator privileges"
+        let script = "do shell script \"\(wgQuickPath) up \(tunnelName)\" with administrator privileges"
         
         if isSudoersInstalled() {
             _ = runSudoCommand(wgQuickPath, args: ["up", tunnelName])
@@ -499,7 +502,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         } else {
             let cmd = "\(wgQuickPath) down \(tunnelName)"
             let escaped = cmd.replacingOccurrences(of: "\"", with: "\\\"")
-            let script = "export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin && do shell script \"\(escaped)\" with administrator privileges"
+            let script = "do shell script \"\(escaped)\" with administrator privileges"
             var err: NSDictionary?
             NSAppleScript(source: script)?.executeAndReturnError(&err)
         }
@@ -539,8 +542,34 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
     
     private func refreshStatus() {
+        guard !isTransitioning else { return }
         let nowOn = checkTunnelUp()
-        if nowOn != isOn {
+        
+        if isOn && !nowOn {
+            LogManager.shared.appendLog("⚠️ Bağlantı kopması algılandı! Otomatik olarak yeniden bağlanılıyor (Self-Healing)...")
+            isTransitioning = true
+            updateIcon()
+            rebuildMenu()
+            
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else { return }
+                if self.currentMode == .dpi {
+                    self.stopDPI()
+                    self.startDPI()
+                } else {
+                    self.stopWARP()
+                    self.startWARP()
+                }
+                
+                DispatchQueue.main.async {
+                    self.isTransitioning = false
+                    self.isOn = self.checkTunnelUp()
+                    self.updateIcon()
+                    self.rebuildMenu()
+                    self.fetchIP()
+                }
+            }
+        } else if nowOn != isOn {
             isOn = nowOn
             updateIcon()
             rebuildMenu()
