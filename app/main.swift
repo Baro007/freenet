@@ -11,8 +11,19 @@ enum Mode: String {
 final class AppController: NSObject, NSApplicationDelegate {
     private let tunnelName = "wgcf"
     private let tunnelInternalIP = "172.16.0.2"
-    private let wgQuickPath = "/opt/homebrew/bin/wg-quick"
     private let networksetupPath = "/usr/sbin/networksetup"
+    
+    private var wgQuickPath: String {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: "/opt/homebrew/bin/wg-quick") { return "/opt/homebrew/bin/wg-quick" }
+        return "/usr/local/bin/wg-quick"
+    }
+    
+    private var brewPrefix: String {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: "/opt/homebrew/bin/brew") { return "/opt/homebrew/bin" }
+        return "/usr/local/bin"
+    }
     
     private var statusItem: NSStatusItem!
     private var statusTimer: Timer?
@@ -392,24 +403,89 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
     
+    private func ensureWARPSetup() -> Bool {
+        let fm = FileManager.default
+        let brewPath = brewPrefix + "/brew"
+        let wgcfPath = brewPrefix + "/wgcf"
+        let wgQuick = brewPrefix + "/wg-quick"
+        
+        if !fm.fileExists(atPath: wgcfPath) || !fm.fileExists(atPath: wgQuick) {
+            DispatchQueue.main.sync {
+                showInfo(detail: "Tünel modu için gerekli paketler (wireguard-tools, wgcf) indiriliyor. Bu işlem birkaç dakika sürebilir, lütfen bekleyin...")
+            }
+            
+            if !fm.fileExists(atPath: brewPath) {
+                DispatchQueue.main.sync {
+                    showError(detail: "Homebrew bulunamadı. Lütfen önce https://brew.sh adresinden Homebrew yükleyin.")
+                }
+                return false
+            }
+            
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: brewPath)
+            task.arguments = ["install", "wireguard-tools", "wgcf"]
+            try? task.run()
+            task.waitUntilExit()
+            
+            if task.terminationStatus != 0 {
+                DispatchQueue.main.sync {
+                    showError(detail: "Bağımlılıklar yüklenemedi. Lütfen Terminal'te manuel olarak çalıştırın: brew install wireguard-tools wgcf")
+                }
+                return false
+            }
+        }
+        
+        let configDir = NSString(string: "~/.config/wireguard").expandingTildeInPath
+        let configPath = configDir + "/wgcf.conf"
+        
+        if !fm.fileExists(atPath: configPath) {
+            DispatchQueue.main.sync {
+                showInfo(detail: "WARP profiliniz oluşturuluyor. Bu işlem bir kereye mahsustur, lütfen bekleyin...")
+            }
+            
+            try? fm.createDirectory(atPath: configDir, withIntermediateDirectories: true, attributes: nil)
+            
+            let regTask = Process()
+            regTask.executableURL = URL(fileURLWithPath: wgcfPath)
+            regTask.arguments = ["register", "--accept-tos"]
+            regTask.currentDirectoryURL = URL(fileURLWithPath: configDir)
+            try? regTask.run()
+            regTask.waitUntilExit()
+            
+            let genTask = Process()
+            genTask.executableURL = URL(fileURLWithPath: wgcfPath)
+            genTask.arguments = ["generate"]
+            genTask.currentDirectoryURL = URL(fileURLWithPath: configDir)
+            try? genTask.run()
+            genTask.waitUntilExit()
+            
+            if !fm.fileExists(atPath: configPath) {
+                DispatchQueue.main.sync {
+                    showError(detail: "WARP profili oluşturulamadı.")
+                }
+                return false
+            }
+        }
+        
+        let destConfig = "/etc/wireguard/wgcf.conf"
+        if !fm.fileExists(atPath: destConfig) {
+            let cpCmd = "mkdir -p /etc/wireguard && cp '\(configPath)' '\(destConfig)' && chmod 600 '\(destConfig)'"
+            let script = "export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin && do shell script \"\(cpCmd)\" with administrator privileges"
+            var err: NSDictionary?
+            NSAppleScript(source: script)?.executeAndReturnError(&err)
+        }
+        
+        return true
+    }
+
     private func startWARP() {
-        let configSrc = NSString(string: "~/.config/wireguard/wgcf.conf").expandingTildeInPath
-        let configDst = "/etc/wireguard/wgcf.conf"
+        if !ensureWARPSetup() {
+            return
+        }
         
-        let cpCmd = "mkdir -p /etc/wireguard && cp '\(configSrc)' '\(configDst)' && chmod 600 '\(configDst)'"
-        let fullCmd = "\(cpCmd) && \(wgQuickPath) up \(tunnelName)"
+        let script = "export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin && do shell script \"\(wgQuickPath) up \(tunnelName)\" with administrator privileges"
         
-        let escaped = fullCmd.replacingOccurrences(of: "\"", with: "\\\"")
-        let script = "export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin && do shell script \"\(escaped)\" with administrator privileges"
-        
-        // wg-quick up requires evaluating full command chain, sudoers helps only if we adapt it.
-        // To utilize passwordless sudo for WARP, we can just run sudo wg-quick up wgcf
-        // Wait, copying the config requires sudo too if /etc/wireguard doesn't exist.
-        // Let's assume the config is already copied or we just use AppleScript for WARP setup
-        // But to keep it passwordless, we must run `sudo wg-quick up wgcf`.
         if isSudoersInstalled() {
-            // Assume config is in /etc/wireguard/wgcf.conf already (we can copy it manually once if needed)
-            // Or just try wg-quick up directly
             _ = runSudoCommand(wgQuickPath, args: ["up", tunnelName])
         } else {
             var err: NSDictionary?

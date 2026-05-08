@@ -1,64 +1,78 @@
 # 🛡️ Freenet (macOS)
 
-**Freenet**, Türkiye'deki internet sansürlerini ve IP bloklamalarını aşmak için geliştirilmiş, tamamen açık kaynaklı ve dışa bağımsız bir **Hibrit (DPI + Tünel)** macOS menü çubuğu uygulamasıdır. 
+![Platform](https://img.shields.io/badge/Platform-macOS%2013.0+-apple?style=flat-square&logo=apple)
+![Swift](https://img.shields.io/badge/Swift-5.0-orange?style=flat-square&logo=swift)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+![Status](https://img.shields.io/badge/Status-Active-success?style=flat-square)
 
-Windows tarafındaki efsanevi GoodbyeDPI mimarisinden ilham alınarak macOS'a uyarlanmıştır. Herhangi bir üyelik, kayıt veya ücret gerektirmez.
+**Bypass censorship. No account. No subscription. Just click.**
 
----
+The ultimate, zero-configuration hybrid internet censorship bypass tool for macOS. Inspired by the legendary GoodbyeDPI, but custom-built for Mac as a lightweight, native menubar application.
 
-## ✨ Özellikler
-
-Freenet, sansür yöntemlerine karşı iki farklı motor (mod) sunar:
-
-### 1. 🚀 DPI Modu (Yerel Motor - ciadpi)
-* **Nasıl Çalışır:** Arka planda SOCKS5 tabanlı yerel bir proxy açarak (127.0.0.1:1080) paketlerinizi parçalar. İnternet servis sağlayıcınızın koyduğu SNI (Server Name Indication) filtrelerini aşmanızı sağlar.
-* **Avantajı:** Hiçbir dış sunucuya (VPN'e) bağlanmaz! Trafiğiniz doğrudan hedefe gider. Bu nedenle **hız kaybı sıfırdır**. YouTube, X (Twitter) gibi DPI sansürü olan sitelere tam hızda girersiniz.
-* **Not:** Anonimlik sağlamaz. Sadece sansürü deler.
-
-### 2. 🌍 Tünel Modu (WARP - wg-quick)
-* **Nasıl Çalışır:** Eğer erişmek istediğiniz site (Örn: Discord) DPI filtresiyle değil de **doğrudan IP engellemesi** ile kapatılmışsa, DPI motoru işe yaramaz. Bu durumda menüden "Tünel Modu"nu seçersiniz. Sistem tamamen ücretsiz olan Cloudflare WARP ağı üzerinden WireGuard tüneli kurar.
-* **Avantajı:** Gerçek kimliğinizi ve IP'nizi yurt dışına taşır. Tüm engelleri kesin olarak aşar.
-
-### ⚡️ Şifresiz Tek Tıkla Geçiş (Sudoers IPC)
-VPN ve DPI araçları macOS'ta `sudo` (Yönetici) izni gerektirir. Freenet, ilk açılışta sizden bir kereye mahsus izin isteyerek sisteminize özel ve güvenli bir `sudoers` dosyası kurar. Artık menüden sadece tek tıkla **sıfır saniyede ve şifre girmeden** modlar arası geçiş yapabilirsiniz.
+🇹🇷 [Türkçe dokümantasyon için tıklayın (Turkish README)](README.tr.md)
 
 ---
 
-## 📦 Kolay Kurulum
+## ✨ Features
 
-Uygulamayı Mac'inize yüklemek için Terminal'i (Uygulamalar > İzlenceler > Terminal) açın ve aşağıdaki komutları sırasıyla yapıştırıp `Enter`'a basın:
+Freenet offers two distinct engines (modes) to counter different censorship tactics:
+
+### 1. 🚀 DPI Mode (Local Bypass - ciadpi)
+* **How it works:** Spawns a local SOCKS5 proxy (`127.0.0.1:1080`) that fragments your packets, circumventing SNI (Server Name Indication) filters applied by your ISP.
+* **The Advantage:** Traffic is NOT routed through an external VPN. You get **zero speed loss**. Access blocked sites (like YouTube, X) at your maximum native internet speed.
+* **Note:** This bypasses DPI but does not anonymize your IP.
+
+### 2. 🌍 Tunnel Mode (WARP - wg-quick)
+* **How it works:** If a site is blocked via strict IP-ban (not just DPI), the DPI mode won't suffice. Select "Tunnel Mode" to instantly route your traffic through a free, automated Cloudflare WARP WireGuard tunnel.
+* **The Advantage:** Masks your real IP and securely bypasses absolute IP blocks. Zero configuration required—Freenet handles the keys and profiles for you.
+
+### ⚡️ Passwordless 1-Click Toggle (Sudoers IPC)
+VPN and DPI operations on macOS require root privileges. Freenet elegantly asks for your permission just *once* during initial setup to create a secure, restricted `/etc/sudoers.d/freenet` file. Afterwards, toggling modes is instant and requires **zero passwords**.
+
+### 📊 Live Matrix Dashboard & Custom Settings
+See what's happening under the hood! Freenet includes a real-time, matrix-style live log viewer for the DPI engine, and a Settings window to tweak DPI fragmentation arguments for different ISPs.
+
+---
+
+## 📦 One-Command Install
+
+To install Freenet, simply open your Terminal (`Applications > Utilities > Terminal`) and paste this single command:
 
 ```bash
-# 1. Projeyi bilgisayarınıza indirin
+curl -fsSL https://raw.githubusercontent.com/Baro007/freenet/main/install.sh | bash
+```
+
+*This will automatically clone, build, and install the app to your `/Applications` folder.*
+
+### Manual Install
+If you prefer to build it manually:
+```bash
 git clone https://github.com/Baro007/freenet.git
 cd freenet/app
-
-# 2. Uygulamayı derleyin ve yükleyin
 ./build.sh
 cp -R build/freenet.app /Applications/
 xattr -dr com.apple.quarantine /Applications/freenet.app
-
-# 3. Freenet'i başlatın
 open /Applications/freenet.app
 ```
 
-*Not: Uygulama çalıştıktan sonra Mac'inizin üst sağ köşesinde (saatin yanında) küçük bir kalkan 🛡️ ikonu belirecektir.*
+---
+
+## 🛠️ First Usage
+
+1. Click the shield 🛡️ icon in your macOS menubar.
+2. Click **"Şifresiz Geçişi Aktif Et ⚡️"** (Enable Passwordless Toggle).
+3. Enter your Mac password (one-time setup).
+4. Click **ON / OFF** to enjoy an open internet!
+5. Switch between `DPI` (for speed) and `WARP` (for IP blocks) from the **Connection Mode** menu.
 
 ---
 
-## 🛠️ İlk Kullanım
+## 🤝 Credits & Acknowledgements
 
-1. Kalkan ikonuna tıklayın.
-2. Açılan menüden **"Şifresiz Geçişi Aktif Et ⚡️"** seçeneğine tıklayın.
-3. Mac şifrenizi girin.
-4. Artık kalkan ikonuna basıp **AÇ / KAPAT** diyerek sansürsüz internetin keyfini çıkarabilirsiniz!
-5. **Bağlantı Modu** altından hız için `DPI`, gizlilik için `Tünel (WARP)` seçebilirsiniz. En üst kısımda IP adresinizin başarıyla değiştiğini görebilirsiniz.
+Freenet stands on the shoulders of giants in the open internet community:
+- [ciadpi (ByeDPI)](https://github.com/hufrea/byedpi) - The core DPI bypass engine.
+- [WireGuard](https://www.wireguard.com/) & [Cloudflare WARP](https://1.1.1.1/) - The tunnel infrastructure.
+- [GoodbyeDPI-Turkey](https://github.com/cagritaskn/GoodbyeDPI-Turkey) & [SplitWire-Turkey](https://github.com/a-mertdincer/SplitWire-Turkey-macOS) - Community inspirations.
 
----
-
-## 🤝 Krediler ve Teşekkürler
-
-Freenet, açık interneti savunan aşağıdaki özgür yazılım projelerinin omuzlarında yükselmektedir:
-- [ciadpi (ByeDPI)](https://github.com/hufrea/byedpi) - DPI atlatma motoru.
-- [WireGuard](https://www.wireguard.com/) & [Cloudflare WARP](https://1.1.1.1/) - Tünel altyapısı.
-- [GoodbyeDPI-Turkey](https://github.com/cagritaskn/GoodbyeDPI-Turkey) & [SplitWire-Turkey](https://github.com/a-mertdincer/SplitWire-Turkey-macOS) - İlham alınan topluluk projeleri.
+## 📝 License
+MIT License. See [LICENSE](LICENSE) for details.
