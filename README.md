@@ -19,9 +19,9 @@ Freenet is the ultimate, **zero-configuration** hybrid internet censorship bypas
 
 ---
 
-## ✨ Why Freenet? (The Two Engines)
+## ✨ Why Freenet? (The Three Engines)
 
-Censorship systems vary. Freenet provides two specialized engines to defeat them, giving you the best of both worlds:
+Censorship systems vary. Freenet provides three specialized engines to defeat them, giving you the best option for any scenario:
 
 ### 1. 🚀 DPI Mode (Zero Speed Loss)
 *   **The Problem:** Your Internet Service Provider (ISP) acts like a mailman inspecting the label on your packages. If it says "youtube.com", they throw it away (Deep Packet Inspection).
@@ -32,6 +32,11 @@ Censorship systems vary. Freenet provides two specialized engines to defeat them
 *   **The Problem:** Some governments completely block the IP addresses of certain websites. Slicing the package label doesn't work if the destination address itself is banned.
 *   **The Freenet Solution:** Freenet automatically builds a secure, encrypted WireGuard tunnel using Cloudflare's massive global infrastructure (WARP). It routes your entire traffic through this indestructible "pipe".
 *   **The Magic:** Bypasses absolute IP bans, DNS poisoning, and hides your real IP address. It protects you on public Wi-Fi networks.
+
+### 3. 🛡️ sing-box Mode (Advanced Tunnel & TLS Fragmentation)
+*   **The Problem:** Sophisticated firewalls block connections using deep packet analysis and smart SNI detection, rendering basic packet-slicing or standard VPNs ineffective or easily blocked.
+*   **The Freenet Solution:** Freenet spins up a local `sing-box` engine (configured as a SOCKS5 proxy on port `1081`). It routes traffic directly but applies advanced **TLS Record Fragmentation** (`tls_record_fragment`) on port 443 and utilizes secure **DNS-over-HTTPS (DoH)** from Cloudflare.
+*   **The Magic:** Splitting the TLS handshake client hello records confuses advanced firewalls, allowing you to bypass restrictions without routing traffic through a third-party VPN server. Your DNS queries are encrypted via DoH to prevent poisoning.
 
 ---
 

@@ -8,6 +8,10 @@
 		<data>
 		QNteTtqGWosVpKbp/Chinmk6G64=
 		</data>
+		<key>Resources/bin/sing-box</key>
+		<data>
+		YZjxeAR2+0kbP6Ju17nCm1BgF3A=
+		</data>
 	</dict>
 	<key>files2</key>
 	<dict>
@@ -16,6 +20,13 @@
 			<key>hash2</key>
 			<data>
 			j+ww39finwopfDkDdU3gqApXvxFAXTnEVuGsHnidgHw=
+			</data>
+		</dict>
+		<key>Resources/bin/sing-box</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			hemlNZ24aTMgbKvlbhwf+s9Sub8QaeifnUgwMZgOJKI=
 			</data>
 		</dict>
 	</dict>

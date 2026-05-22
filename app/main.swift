@@ -6,6 +6,7 @@ import SwiftUI
 enum Mode: String {
     case dpi = "DPI Modu (Yerel)"
     case warp = "Tünel Modu (WARP)"
+    case singbox = "sing-box Modu"
 }
 
 final class AppController: NSObject, NSApplicationDelegate {
@@ -35,6 +36,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var currentIPInfo = "Mevcut IP: Denetleniyor..."
     
     private var ciadpiProcess: Process?
+    private var singboxProcess: Process?
     
     private var settingsWindow: NSWindow?
     private var dashboardWindow: NSWindow?
@@ -67,13 +69,15 @@ final class AppController: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         if isOn {
             if currentMode == .dpi { stopDPI() }
-            else { stopWARP() }
+            else if currentMode == .warp { stopWARP() }
+            else { stopSingBox() }
         }
     }
 
     private func cleanupOrphanedProxy() {
         let ciadpiRunning = (ciadpiProcess?.isRunning == true)
-        if !ciadpiRunning && checkProxyOn() {
+        let singboxRunning = (singboxProcess?.isRunning == true)
+        if !ciadpiRunning && !singboxRunning && checkProxyOn() {
             let interfaces = ["Wi-Fi", "Ethernet"]
             for iface in interfaces {
                 _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxystate", iface, "off"])
@@ -100,9 +104,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func isSudoersInstalled() -> Bool {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-        task.arguments = ["-n", networksetupPath, "-version"]
+        let task = createProcess("/usr/bin/sudo", args: ["-n", "/usr/bin/true"])
         task.standardOutput = Pipe()
         task.standardError = Pipe()
         do {
@@ -120,7 +122,8 @@ final class AppController: NSObject, NSApplicationDelegate {
             "\(user) ALL=(ALL) NOPASSWD: \(networksetupPath) -setsocksfirewallproxy *",
             "\(user) ALL=(ALL) NOPASSWD: \(networksetupPath) -setsocksfirewallproxystate *",
             "\(user) ALL=(ALL) NOPASSWD: \(wgQuickPath) up wgcf",
-            "\(user) ALL=(ALL) NOPASSWD: \(wgQuickPath) down wgcf"
+            "\(user) ALL=(ALL) NOPASSWD: \(wgQuickPath) down wgcf",
+            "\(user) ALL=(ALL) NOPASSWD: /usr/bin/true"
         ]
         let content = rules.joined(separator: "\n")
         let script = """
@@ -143,20 +146,34 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func runSudoCommand(_ cmd: String, args: [String]) -> Bool {
         if isSudoersInstalled() {
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-            task.arguments = [cmd] + args
+            let task = createProcess("/usr/bin/sudo", args: [cmd] + args)
             try? task.run()
             task.waitUntilExit()
             return task.terminationStatus == 0
         } else {
             let fullCmd = "\(cmd) " + args.joined(separator: " ")
             let escaped = fullCmd.replacingOccurrences(of: "\"", with: "\\\"")
-            let script = "do shell script \"\(escaped)\" with administrator privileges"
+            let script = "do shell script \"export PATH=\\\"/opt/homebrew/bin:/usr/local/bin:\\$PATH\\\"; \(escaped)\" with administrator privileges"
             var err: NSDictionary?
             NSAppleScript(source: script)?.executeAndReturnError(&err)
             return err == nil
         }
+    }
+
+    private func createProcess(_ cmd: String, args: [String]) -> Process {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: cmd)
+        task.arguments = args
+        
+        var env = ProcessInfo.processInfo.environment
+        let homebrewPath = "/opt/homebrew/bin:/usr/local/bin"
+        if let currentPath = env["PATH"] {
+            env["PATH"] = "\(homebrewPath):\(currentPath)"
+        } else {
+            env["PATH"] = homebrewPath
+        }
+        task.environment = env
+        return task
     }
 
     private func updateIcon() {
@@ -217,6 +234,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         warpItem.target = self
         warpItem.state = (currentMode == .warp) ? .on : .off
         modeSubmenu.addItem(warpItem)
+
+        let singboxItem = NSMenuItem(title: Mode.singbox.rawValue, action: #selector(selectSingBoxMode), keyEquivalent: "")
+        singboxItem.target = self
+        singboxItem.state = (currentMode == .singbox) ? .on : .off
+        modeSubmenu.addItem(singboxItem)
         
         let modeMenuItem = NSMenuItem(title: "Bağlantı Modu", action: nil, keyEquivalent: "")
         modeMenuItem.submenu = modeSubmenu
@@ -264,6 +286,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(currentMode.rawValue, forKey: "freenetMode")
         rebuildMenu()
     }
+    
+    @objc private func selectSingBoxMode() {
+        currentMode = .singbox
+        UserDefaults.standard.set(currentMode.rawValue, forKey: "freenetMode")
+        rebuildMenu()
+    }
 
     @objc private func toggleTunnel() {
         guard !isTransitioning else { return }
@@ -277,14 +305,18 @@ final class AppController: NSObject, NSApplicationDelegate {
             if self.isOn {
                 if self.currentMode == .dpi {
                     self.stopDPI()
-                } else {
+                } else if self.currentMode == .warp {
                     self.stopWARP()
+                } else {
+                    self.stopSingBox()
                 }
             } else {
                 if self.currentMode == .dpi {
                     self.startDPI()
-                } else {
+                } else if self.currentMode == .warp {
                     self.startWARP()
+                } else {
+                    self.startSingBox()
                 }
             }
             
@@ -301,10 +333,12 @@ final class AppController: NSObject, NSApplicationDelegate {
     @objc private func showSettings() {
         if settingsWindow == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
-                styleMask: [.titled, .closable, .miniaturizable],
+                contentRect: NSRect(x: 0, y: 0, width: 440, height: 280),
+                styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
                 backing: .buffered, defer: false)
             window.title = "Freenet Ayarları"
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
             window.center()
             window.setFrameAutosaveName("SettingsWindow")
             window.isReleasedWhenClosed = false
@@ -318,10 +352,12 @@ final class AppController: NSObject, NSApplicationDelegate {
     @objc private func showDashboard() {
         if dashboardWindow == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                contentRect: NSRect(x: 0, y: 0, width: 580, height: 420),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                 backing: .buffered, defer: false)
             window.title = "Freenet Canlı Dashboard"
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
             window.center()
             window.setFrameAutosaveName("DashboardWindow")
             window.isReleasedWhenClosed = false
@@ -334,18 +370,13 @@ final class AppController: NSObject, NSApplicationDelegate {
     
     private func startDPI() {
         let ciadpiPath = Bundle.main.bundlePath + "/Contents/Resources/bin/ciadpi"
-        let chmodTask = Process()
-        chmodTask.executableURL = URL(fileURLWithPath: "/bin/chmod")
-        chmodTask.arguments = ["+x", ciadpiPath]
+        let chmodTask = createProcess("/bin/chmod", args: ["+x", ciadpiPath])
         try? chmodTask.run()
         chmodTask.waitUntilExit()
         
-        ciadpiProcess = Process()
-        ciadpiProcess?.executableURL = URL(fileURLWithPath: ciadpiPath)
-        
         let dpiArgsStr = UserDefaults.standard.string(forKey: "dpiArgs") ?? "-d 1 -p 1080"
         let args = dpiArgsStr.components(separatedBy: " ").filter { !$0.isEmpty }
-        ciadpiProcess?.arguments = args
+        ciadpiProcess = createProcess(ciadpiPath, args: args)
         
         // Port'u argümanlardan parse et (varsayılan: 1080)
         var proxyPort = "1080"
@@ -394,9 +425,119 @@ final class AppController: NSObject, NSApplicationDelegate {
         LogManager.shared.appendLog("--- ciadpi durduruldu ---")
         
         // Ensure proxy is killed
-        let killTask = Process()
-        killTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-        killTask.arguments = ["-9", "ciadpi"]
+        let killTask = createProcess("/usr/bin/killall", args: ["-9", "ciadpi"])
+        try? killTask.run()
+        
+        let primaryInterfaces = ["Wi-Fi", "Ethernet"]
+        for interface in primaryInterfaces {
+            _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxystate", interface, "off"])
+        }
+    }
+
+    private func startSingBox() {
+        let singboxPath = Bundle.main.bundlePath + "/Contents/Resources/bin/sing-box"
+        let chmodTask = createProcess("/bin/chmod", args: ["+x", singboxPath])
+        try? chmodTask.run()
+        chmodTask.waitUntilExit()
+        
+        let configDir = NSString(string: "~/.config/freenet").expandingTildeInPath
+        let configPath = configDir + "/sing-box.json"
+        
+        try? FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true, attributes: nil)
+        
+        let configJson = """
+        {
+          "log": {
+            "level": "info",
+            "timestamp": true
+          },
+          "inbounds": [
+            {
+              "type": "socks",
+              "tag": "socks-in",
+              "listen": "127.0.0.1",
+              "listen_port": 1081
+            }
+          ],
+          "outbounds": [
+            {
+              "type": "direct",
+              "tag": "direct-out"
+            }
+          ],
+          "route": {
+            "rules": [
+              {
+                "inbound": ["socks-in"],
+                "action": "sniff"
+              },
+              {
+                "port": 443,
+                "action": "route-options",
+                "tls_record_fragment": true
+              }
+            ]
+          },
+          "dns": {
+            "servers": [
+              {
+                "tag": "cloudflare-doh",
+                "type": "https",
+                "server": "1.1.1.1",
+                "server_port": 443,
+                "path": "/dns-query"
+              }
+            ],
+            "strategy": "ipv4_only"
+          }
+        }
+        """
+        
+        try? configJson.write(toFile: configPath, atomically: true, encoding: .utf8)
+        
+        singboxProcess = createProcess(singboxPath, args: ["run", "-c", configPath])
+        
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        singboxProcess?.standardOutput = outPipe
+        singboxProcess?.standardError = errPipe
+        
+        let logHandler: (FileHandle) -> Void = { fileHandle in
+            let data = fileHandle.availableData
+            if data.isEmpty { return }
+            if let string = String(data: data, encoding: .utf8) {
+                let lines = string.components(separatedBy: .newlines)
+                for line in lines where !line.isEmpty {
+                    LogManager.shared.appendLog(line)
+                }
+            }
+        }
+        outPipe.fileHandleForReading.readabilityHandler = logHandler
+        errPipe.fileHandleForReading.readabilityHandler = logHandler
+        
+        LogManager.shared.appendLog("--- sing-box başlatılıyor (SOCKS5 Port: 1081, DoH, Fragment) ---")
+        do {
+            try singboxProcess?.run()
+        } catch {
+            showError(detail: "sing-box başlatılamadı: \(error.localizedDescription)")
+            return
+        }
+        
+        let primaryInterfaces = ["Wi-Fi", "Ethernet"]
+        for interface in primaryInterfaces {
+            _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxy", interface, "127.0.0.1", "1081"])
+            _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxystate", interface, "on"])
+        }
+    }
+    
+    private func stopSingBox() {
+        (singboxProcess?.standardOutput as? Pipe)?.fileHandleForReading.readabilityHandler = nil
+        (singboxProcess?.standardError as? Pipe)?.fileHandleForReading.readabilityHandler = nil
+        singboxProcess?.terminate()
+        singboxProcess = nil
+        LogManager.shared.appendLog("--- sing-box durduruldu ---")
+        
+        let killTask = createProcess("/usr/bin/killall", args: ["-9", "sing-box"])
         try? killTask.run()
         
         let primaryInterfaces = ["Wi-Fi", "Ethernet"]
@@ -426,9 +567,7 @@ final class AppController: NSObject, NSApplicationDelegate {
                 return false
             }
             
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: brewPath)
-            task.arguments = ["install", "wireguard-tools", "wgcf"]
+            let task = createProcess(brewPath, args: ["install", "wireguard-tools", "wgcf"])
             try? task.run()
             task.waitUntilExit()
             
@@ -450,16 +589,12 @@ final class AppController: NSObject, NSApplicationDelegate {
             
             try? fm.createDirectory(atPath: configDir, withIntermediateDirectories: true, attributes: nil)
             
-            let regTask = Process()
-            regTask.executableURL = URL(fileURLWithPath: wgcfPath)
-            regTask.arguments = ["register", "--accept-tos"]
+            let regTask = createProcess(wgcfPath, args: ["register", "--accept-tos"])
             regTask.currentDirectoryURL = URL(fileURLWithPath: configDir)
             try? regTask.run()
             regTask.waitUntilExit()
             
-            let genTask = Process()
-            genTask.executableURL = URL(fileURLWithPath: wgcfPath)
-            genTask.arguments = ["generate"]
+            let genTask = createProcess(wgcfPath, args: ["generate"])
             genTask.currentDirectoryURL = URL(fileURLWithPath: configDir)
             try? genTask.run()
             genTask.waitUntilExit()
@@ -488,7 +623,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             return
         }
         
-        let script = "do shell script \"\(wgQuickPath) up \(tunnelName)\" with administrator privileges"
+        let script = "do shell script \"export PATH=\\\"/opt/homebrew/bin:/usr/local/bin:\\$PATH\\\"; \(wgQuickPath) up \(tunnelName)\" with administrator privileges"
         
         if isSudoersInstalled() {
             _ = runSudoCommand(wgQuickPath, args: ["up", tunnelName])
@@ -502,7 +637,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         if isSudoersInstalled() {
             _ = runSudoCommand(wgQuickPath, args: ["down", tunnelName])
         } else {
-            let cmd = "\(wgQuickPath) down \(tunnelName)"
+            let cmd = "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; \(wgQuickPath) down \(tunnelName)"
             let escaped = cmd.replacingOccurrences(of: "\"", with: "\\\"")
             let script = "do shell script \"\(escaped)\" with administrator privileges"
             var err: NSDictionary?
@@ -512,8 +647,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func checkTunnelUp() -> Bool {
         if currentMode == .warp {
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/sbin/ifconfig")
+            let task = createProcess("/sbin/ifconfig", args: [])
             let pipe = Pipe()
             task.standardOutput = pipe
             task.standardError = Pipe()
@@ -521,6 +655,9 @@ final class AppController: NSObject, NSApplicationDelegate {
             task.waitUntilExit()
             let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             return out.contains("inet \(tunnelInternalIP)")
+        } else if currentMode == .singbox {
+            let proxyOn = checkProxyOn()
+            return (singboxProcess?.isRunning == true) || proxyOn
         } else {
             let proxyOn = checkProxyOn()
             return (ciadpiProcess?.isRunning == true) || proxyOn
@@ -528,9 +665,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
     
     private func checkProxyOn() -> Bool {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: networksetupPath)
-        task.arguments = ["-getsocksfirewallproxy", "Wi-Fi"]
+        let task = createProcess(networksetupPath, args: ["-getsocksfirewallproxy", "Wi-Fi"])
         let pipe = Pipe()
         task.standardOutput = pipe
         try? task.run()
@@ -558,9 +693,12 @@ final class AppController: NSObject, NSApplicationDelegate {
                 if self.currentMode == .dpi {
                     self.stopDPI()
                     self.startDPI()
-                } else {
+                } else if self.currentMode == .warp {
                     self.stopWARP()
                     self.startWARP()
+                } else {
+                    self.stopSingBox()
+                    self.startSingBox()
                 }
                 
                 DispatchQueue.main.async {
@@ -606,13 +744,15 @@ final class AppController: NSObject, NSApplicationDelegate {
     @objc private func showAbout() {
         if aboutWindow == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 450, height: 450),
-                styleMask: [.titled, .closable],
+                contentRect: NSRect(x: 0, y: 0, width: 460, height: 580),
+                styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
             window.center()
             window.title = "Freenet Hakkında"
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
             window.contentView = NSHostingView(rootView: AboutView())
             window.isReleasedWhenClosed = false
             self.aboutWindow = window
@@ -625,7 +765,8 @@ final class AppController: NSObject, NSApplicationDelegate {
     @objc private func quitApp() {
         if isOn {
             if currentMode == .dpi { stopDPI() }
-            else { stopWARP() }
+            else if currentMode == .warp { stopWARP() }
+            else { stopSingBox() }
         }
         NSApp.terminate(nil)
     }

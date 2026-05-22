@@ -20,7 +20,7 @@ Freenet, macOS için özel olarak Swift ile geliştirilmiş, **sıfır ayar** ge
 
 ## ✨ Neden Freenet? (Nasıl Çalışır?)
 
-Sansür sistemleri tek tip değildir. Freenet, karşılaştığınız engele göre kullanabileceğiniz iki farklı motor sunar:
+Sansür sistemleri tek tip değildir. Freenet, karşılaştığınız engele göre kullanabileceğiniz üç farklı motor sunar:
 
 ### 1. 🚀 DPI Modu (Hız ve Performans Odaklı)
 *   **Sorun:** Türkiye'deki sansür sistemi genellikle bir kargocu (İSS) gibi çalışır. Paketin üstünde "yasaklisite.com" yazıyorsa kargoyu çöpe atar (DPI - Derin Paket İncelemesi).
@@ -31,6 +31,11 @@ Sansür sistemleri tek tip değildir. Freenet, karşılaştığınız engele gö
 *   **Sorun:** Bazen devletler sadece isimden değil, sitenin doğrudan adresinden (IP Ban) engelleme yapar. Bu durumda kargo etiketini parçalamak işe yaramaz.
 *   **Çözüm:** Freenet, dünyanın en büyük internet altyapılarından biri olan Cloudflare sunucularına doğrudan şifreli bir "boru" (WireGuard Tüneli) döşer. Sizin tüm trafiğiniz bu aşılmaz borunun içinden geçer.
 *   **Sihir:** IP banlı siteleri anında açar. Sizi anonim yapar (IP adresiniz Cloudflare'in IP'si gibi görünür). Ortak Wi-Fi ağlarında sizi bilgisayar korsanlarından korur.
+
+### 3. 🛡️ sing-box Modu (Gelişmiş Tünel ve TLS Fragmantasyonu)
+*   **Sorun:** Bazı gelişmiş sansür mekanizmaları, standart paket bölme (DPI modu) veya genel VPN tünellerini tespit edip engelleyecek düzeyde akıllı SNI filtrelerine ve derin paket inceleme sistemlerine sahiptir.
+*   **Çözüm:** Freenet, yerel bir `sing-box` motoru başlatır (SOCKS5 port `1081`). Bu modda, 443 portu üzerinden giden trafiğe gelişmiş **TLS El Sıkışma Fragmantasyonu (TLS Record Fragmentation)** uygular ve şifreli **DNS-over-HTTPS (DoH)** protokolünü (Cloudflare üzerinden) devreye sokar.
+*   **Sihir:** TLS el sıkışma paketlerini küçük parçalara bölerek gelişmiş sansür filtrelerinin aklını karıştırır ve bağlantının engellenmesini önler. DoH ise DNS zehirlemelerini engeller. Herhangi bir VPN sunucusuna bağlanmadan ve ek hız kaybı yaşamadan sansürü aşmanızı sağlar.
 
 ---
 
