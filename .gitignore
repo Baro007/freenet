@@ -1,0 +1,10 @@
+.gradle/
+**/build/
+!**/build/outputs/apk/debug/app-debug.apk
+local.properties
+.DS_Store
+*.iml
+.idea/
+build/
+app/build/
+!app/build/outputs/apk/debug/app-debug.apk
