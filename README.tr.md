@@ -60,6 +60,23 @@ curl -fsSL https://raw.githubusercontent.com/Baro007/freenet/main/install.sh | b
 
 *Bu komut uygulamayı indirecek, derleyecek ve `Uygulamalar` klasörünüze yerleştirip otomatik başlatacaktır.*
 
+## 📱 Android Sürümü (Beta)
+
+Freenet artık Android platformunda! Canlı bağlantı logları, entegre `sing-box` çekirdeği (`libbox-android` aracılığıyla) ve macOS sürümündeki 3 sansür aşım modunun (DPI, WARP ve sing-box) tamamını içeren modern bir Jetpack Compose arayüzüne sahiptir.
+
+### Özellikler
+*   **Sıfır Ayar:** Yükleyin ve tek tıkla bağlanın.
+*   **Log Kopyalama ve Paylaşma:** Hataları kolayca teşhis edebilmeniz için cihaz/sistem bilgilerini otomatik içeren kopyalanabilir ve paylaşılabilir log sistemi.
+*   **Boyut Optimizasyonu:** ARM64-v8a cihazlar için optimize edilmiş mimari ile küçük boyut (~58 MB).
+
+### Kendiniz Derlemek İçin
+APK dosyasını kendi bilgisayarınızda derlemek için Java 17+ ve Android SDK kurulu olmalıdır:
+```bash
+cd android
+./gradlew assembleDebug
+```
+Derlenen APK dosyası şu konumda oluşacaktır: `android/app/build/outputs/apk/debug/app-debug.apk`.
+
 ---
 
 ## 🤝 Krediler ve İlham Kaynakları
@@ -69,3 +86,4 @@ curl -fsSL https://raw.githubusercontent.com/Baro007/freenet/main/install.sh | b
 
 ## 📝 Lisans
 MIT License. Detaylar için [LICENSE](LICENSE) dosyasına bakabilirsiniz.
+

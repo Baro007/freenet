@@ -61,6 +61,23 @@ curl -fsSL https://raw.githubusercontent.com/Baro007/freenet/main/install.sh | b
 
 *This will automatically clone, build, and install the app to your `/Applications` folder.*
 
+## 📱 Android Version (Beta)
+
+Freenet is now available on Android! It features a premium Jetpack Compose dark UI with live connection logs, integrated `sing-box` core (via `libbox-android`), and the same three bypass modes (DPI, WARP, and sing-box).
+
+### Features
+*   **Zero Configuration:** Install and connect.
+*   **Copy & Share Logs:** Built-in copyable log viewer with device and system information headers to easily copy or share diagnostics.
+*   **Optimized Binary Size:** Bundled and optimized for ARM64-v8a devices (~58 MB instead of 215 MB).
+
+### Build & Run
+To compile the APK yourself, you will need Java 17+ and the Android SDK:
+```bash
+cd android
+./gradlew assembleDebug
+```
+The output APK will be generated at `android/app/build/outputs/apk/debug/app-debug.apk`.
+
 ---
 
 ## 🤝 Credits & Acknowledgements
@@ -70,3 +87,4 @@ curl -fsSL https://raw.githubusercontent.com/Baro007/freenet/main/install.sh | b
 
 ## 📝 License
 MIT License. See [LICENSE](LICENSE) for details.
+
