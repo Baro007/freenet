@@ -29,15 +29,20 @@ object LogManager {
 
     fun loadLogsFromFile(context: Context) {
         init(context)
-        try {
-            val file = java.io.File(context.filesDir, "freenet_vpn.log")
-            if (file.exists()) {
-                val lines = file.readLines()
-                _logs.clear()
-                _logs.addAll(lines.takeLast(MAX_LOGS))
-                _logsFlow.value = _logs.toList()
+        synchronized(this) {
+            try {
+                val file = java.io.File(context.filesDir, "freenet_vpn.log")
+                if (file.exists()) {
+                    val lines = file.readLines()
+                    _logs.clear()
+                    _logs.addAll(lines.takeLast(MAX_LOGS))
+                    _logsFlow.value = _logs.toList()
+                }
+                Unit
+            } catch (e: Exception) {
+                android.util.Log.e("FreenetVPN", "Failed to load logs from file", e)
             }
-        } catch (_: Exception) {}
+        }
     }
 
     fun log(message: String) {
@@ -53,17 +58,22 @@ object LogManager {
         }
         _logsFlow.value = _logs.toList()
         
-        // Write to log file for crash diagnostics
-        appContext?.let { ctx ->
-            try {
-                val file = java.io.File(ctx.filesDir, "freenet_vpn.log")
-                file.appendText("$entry\n")
-                // Truncate file if it gets too large
-                if (file.length() > 500 * 1024) { // 500 KB limit
-                    val lines = file.readLines()
-                    file.writeText(lines.takeLast(MAX_LOGS).joinToString("\n") + "\n")
+        // Write to log file for crash diagnostics with thread synchronization
+        synchronized(this) {
+            appContext?.let { ctx ->
+                try {
+                    val file = java.io.File(ctx.filesDir, "freenet_vpn.log")
+                    file.appendText("$entry\n")
+                    // Truncate file if it gets too large
+                    if (file.length() > 500 * 1024) { // 500 KB limit
+                        val lines = file.readLines()
+                        file.writeText(lines.takeLast(MAX_LOGS).joinToString("\n") + "\n")
+                    }
+                    Unit
+                } catch (e: Exception) {
+                    android.util.Log.e("FreenetVPN", "Failed to write log to file", e)
                 }
-            } catch (_: Exception) {}
+            }
         }
         
         // Also log to Android Logcat for debugging via ADB
@@ -73,10 +83,12 @@ object LogManager {
     fun clear() {
         _logs.clear()
         _logsFlow.value = emptyList()
-        appContext?.let { ctx ->
-            try {
-                java.io.File(ctx.filesDir, "freenet_vpn.log").delete()
-            } catch (_: Exception) {}
+        synchronized(this) {
+            appContext?.let { ctx ->
+                try {
+                    java.io.File(ctx.filesDir, "freenet_vpn.log").delete()
+                } catch (_: Exception) {}
+            }
         }
         log("Günlük temizlendi.")
     }

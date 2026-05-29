@@ -353,15 +353,11 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
             .setOngoing(true)
             .build()
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                if (android.os.Build.VERSION.SDK_INT >= 34) {
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                } else {
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE
-                }
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)
