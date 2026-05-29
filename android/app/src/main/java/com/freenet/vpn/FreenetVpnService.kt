@@ -221,10 +221,19 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
             }
             
             // Exclude / Include apps
+            // Always exclude our own app to prevent routing loops and "operation not permitted" socket errors
+            try {
+                builder.addDisallowedApplication(packageName)
+                LogManager.log("[Tünel] Kendi paketimiz ($packageName) VPN tüneli dışına çıkarıldı.")
+            } catch (e: Exception) {
+                LogManager.log("[Tünel] Kendi paketimizi dışlama hatası: ${e.message}")
+            }
+
             val excludeIterator = options.getExcludePackage()
             if (excludeIterator != null) {
                 while (excludeIterator.hasNext()) {
                     val pkg = excludeIterator.next()
+                    if (pkg == packageName) continue // Avoid adding twice
                     try {
                         builder.addDisallowedApplication(pkg)
                     } catch (e: Exception) { /* Package not installed */ }
@@ -268,7 +277,7 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
         LogManager.log("[Platform] Bildirim: ${notification?.toString() ?: "boş"}")
     }
 
-    override fun usePlatformAutoDetectInterfaceControl(): Boolean = true
+    override fun usePlatformAutoDetectInterfaceControl(): Boolean = false
     override fun clearDNSCache() {
         LogManager.log("[Platform] clearDNSCache() çağrıldı")
     }
