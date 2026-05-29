@@ -20,6 +20,25 @@ object LogManager {
 
     private const val MAX_LOGS = 500
     private val dateFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
+    
+    private var appContext: Context? = null
+
+    fun init(context: Context) {
+        appContext = context.applicationContext
+    }
+
+    fun loadLogsFromFile(context: Context) {
+        init(context)
+        try {
+            val file = java.io.File(context.filesDir, "freenet_vpn.log")
+            if (file.exists()) {
+                val lines = file.readLines()
+                _logs.clear()
+                _logs.addAll(lines.takeLast(MAX_LOGS))
+                _logsFlow.value = _logs.toList()
+            }
+        } catch (_: Exception) {}
+    }
 
     fun log(message: String) {
         val clean = message.trim()
@@ -34,6 +53,19 @@ object LogManager {
         }
         _logsFlow.value = _logs.toList()
         
+        // Write to log file for crash diagnostics
+        appContext?.let { ctx ->
+            try {
+                val file = java.io.File(ctx.filesDir, "freenet_vpn.log")
+                file.appendText("$entry\n")
+                // Truncate file if it gets too large
+                if (file.length() > 500 * 1024) { // 500 KB limit
+                    val lines = file.readLines()
+                    file.writeText(lines.takeLast(MAX_LOGS).joinToString("\n") + "\n")
+                }
+            } catch (_: Exception) {}
+        }
+        
         // Also log to Android Logcat for debugging via ADB
         android.util.Log.d("FreenetVPN", clean)
     }
@@ -41,6 +73,11 @@ object LogManager {
     fun clear() {
         _logs.clear()
         _logsFlow.value = emptyList()
+        appContext?.let { ctx ->
+            try {
+                java.io.File(ctx.filesDir, "freenet_vpn.log").delete()
+            } catch (_: Exception) {}
+        }
         log("Günlük temizlendi.")
     }
 

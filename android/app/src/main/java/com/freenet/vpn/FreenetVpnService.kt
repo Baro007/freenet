@@ -12,6 +12,7 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
     private var vpnInterface: ParcelFileDescriptor? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        LogManager.init(this)
         val action = intent?.action
         LogManager.log("[Service] onStartCommand: action=$action")
         

@@ -78,6 +78,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Initialize LogManager and load logs from file
+        LogManager.loadLogsFromFile(this)
+        
         // Set app version for logs
         try {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
