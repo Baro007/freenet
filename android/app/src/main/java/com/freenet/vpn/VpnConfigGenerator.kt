@@ -65,8 +65,8 @@ object VpnConfigGenerator {
         root.put("dns", JSONObject().apply {
             put("servers", JSONArray().apply {
                 put(JSONObject().apply {
-                    put("tag", "google-dns")
-                    put("address", "8.8.8.8")
+                    put("tag", "cloudflare-doh")
+                    put("address", "https://1.1.1.1/dns-query")
                     put("detour", "direct-out")
                 })
             })
@@ -205,10 +205,10 @@ object VpnConfigGenerator {
                     put("address", "https://1.1.1.1/dns-query")
                     put("detour", "warp-out")
                 })
-                // Fallback DNS for WARP endpoint resolution
+                // Fallback DNS for WARP endpoint resolution using native local resolver
                 put(JSONObject().apply {
+                    put("type", "local")
                     put("tag", "bootstrap-dns")
-                    put("address", "8.8.8.8")
                     put("detour", "direct-out")
                 })
             })

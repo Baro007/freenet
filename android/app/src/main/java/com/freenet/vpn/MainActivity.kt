@@ -9,6 +9,7 @@ import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -384,8 +385,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Simple extension helper for coroutines in ComponentActivity
-private val ComponentActivity.lifecycleScope get() = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main)
+
 
 // ═══════════════════════════════════════
 // Theme
