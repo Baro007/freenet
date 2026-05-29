@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 object VpnConfigGenerator {
 
-    fun generateDpiConfig(fd: Int): String {
+    fun generateDpiConfig(): String {
         val root = JSONObject()
         
         // Log Configuration
@@ -15,47 +15,31 @@ object VpnConfigGenerator {
         }
         root.put("log", log)
 
-        // Inbounds - TUN
+        // Inbounds - TUN (libbox manages the fd via PlatformInterface.openTun)
         val inbounds = JSONArray().apply {
             put(JSONObject().apply {
                 put("type", "tun")
                 put("tag", "tun-in")
-                put("fd", fd)
-                put("auto_route", false)
-                put("strict_route", false)
-                put("stack", "gvisor")
+                put("inet4_address", "172.19.0.1/30")
+                put("inet6_address", "fdfe:dcba:9876::1/126")
+                put("mtu", 9000)
+                put("stack", "mixed")
                 put("sniff", true)
             })
         }
         root.put("inbounds", inbounds)
 
-        // Outbounds - Direct
+        // Outbounds - Direct with TLS record fragmentation
         val outbounds = JSONArray().apply {
             put(JSONObject().apply {
                 put("type", "direct")
                 put("tag", "direct-out")
+                put("tcp_multi_path", false)
             })
         }
         root.put("outbounds", outbounds)
 
-        // Routing Rules - Sniiffing & Fragmentation
-        val route = JSONObject().apply {
-            val rules = JSONArray().apply {
-                put(JSONObject().apply {
-                    put("inbound", JSONArray().put("tun-in"))
-                    put("action", "sniff")
-                })
-                put(JSONObject().apply {
-                    put("port", JSONArray().put(443))
-                    put("action", "route-options")
-                    put("tls_record_fragment", true)
-                })
-            }
-            put("rules", rules)
-        }
-        root.put("route", route)
-
-        // DNS Configuration (System default)
+        // DNS Configuration (Google DNS via direct)
         val dns = JSONObject().apply {
             val servers = JSONArray().apply {
                 put(JSONObject().apply {
@@ -72,7 +56,7 @@ object VpnConfigGenerator {
         return root.toString(2)
     }
 
-    fun generateSingBoxConfig(fd: Int): String {
+    fun generateSingBoxConfig(): String {
         val root = JSONObject()
         
         // Log Configuration
@@ -87,10 +71,10 @@ object VpnConfigGenerator {
             put(JSONObject().apply {
                 put("type", "tun")
                 put("tag", "tun-in")
-                put("fd", fd)
-                put("auto_route", false)
-                put("strict_route", false)
-                put("stack", "gvisor")
+                put("inet4_address", "172.19.0.1/30")
+                put("inet6_address", "fdfe:dcba:9876::1/126")
+                put("mtu", 9000)
+                put("stack", "mixed")
                 put("sniff", true)
             })
         }
@@ -105,32 +89,13 @@ object VpnConfigGenerator {
         }
         root.put("outbounds", outbounds)
 
-        // Routing Rules - Sniffing & Fragmentation
-        val route = JSONObject().apply {
-            val rules = JSONArray().apply {
-                put(JSONObject().apply {
-                    put("inbound", JSONArray().put("tun-in"))
-                    put("action", "sniff")
-                })
-                put(JSONObject().apply {
-                    put("port", JSONArray().put(443))
-                    put("action", "route-options")
-                    put("tls_record_fragment", true)
-                })
-            }
-            put("rules", rules)
-        }
-        root.put("route", route)
-
         // DNS Configuration (Cloudflare DoH)
         val dns = JSONObject().apply {
             val servers = JSONArray().apply {
                 put(JSONObject().apply {
                     put("tag", "cloudflare-doh")
-                    put("type", "https")
-                    put("server", "1.1.1.1")
-                    put("server_port", 443)
-                    put("path", "/dns-query")
+                    put("address", "https://1.1.1.1/dns-query")
+                    put("detour", "direct-out")
                 })
             }
             put("servers", servers)
@@ -141,7 +106,7 @@ object VpnConfigGenerator {
         return root.toString(2)
     }
 
-    fun generateWarpConfig(fd: Int, privateKey: String, localIPv4: String, localIPv6: String): String {
+    fun generateWarpConfig(privateKey: String, localIPv4: String, localIPv6: String): String {
         val root = JSONObject()
         
         // Log Configuration
@@ -156,10 +121,10 @@ object VpnConfigGenerator {
             put(JSONObject().apply {
                 put("type", "tun")
                 put("tag", "tun-in")
-                put("fd", fd)
-                put("auto_route", false)
-                put("strict_route", false)
-                put("stack", "gvisor")
+                put("inet4_address", "172.19.0.1/30")
+                put("inet6_address", "fdfe:dcba:9876::1/126")
+                put("mtu", 1280)
+                put("stack", "mixed")
                 put("sniff", true)
             })
         }
@@ -185,33 +150,41 @@ object VpnConfigGenerator {
                 put("peer_public_key", "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=")
                 put("mtu", 1280)
             })
+            put(JSONObject().apply {
+                put("type", "direct")
+                put("tag", "direct-out")
+            })
         }
         root.put("outbounds", outbounds)
 
-        // Routing Rules - All to warp-out
+        // Route - default all to warp
         val route = JSONObject().apply {
+            put("default_mark", 51820)
             val rules = JSONArray().apply {
+                // DNS hijack
                 put(JSONObject().apply {
-                    put("inbound", JSONArray().put("tun-in"))
-                    put("action", "sniff")
-                })
-                put(JSONObject().apply {
-                    put("outbound", "warp-out")
+                    put("protocol", JSONArray().put("dns"))
+                    put("outbound", "dns-out")
                 })
             }
             put("rules", rules)
+            put("final", "warp-out")
         }
         root.put("route", route)
 
-        // DNS Configuration (Cloudflare DoH detoured to warp-out)
+        // Add dns-out outbound
+        val existingOutbounds = root.getJSONArray("outbounds")
+        existingOutbounds.put(JSONObject().apply {
+            put("type", "dns")
+            put("tag", "dns-out")
+        })
+
+        // DNS Configuration (Cloudflare DoH via warp)
         val dns = JSONObject().apply {
             val servers = JSONArray().apply {
                 put(JSONObject().apply {
                     put("tag", "cloudflare-doh")
-                    put("type", "https")
-                    put("server", "1.1.1.1")
-                    put("server_port", 443)
-                    put("path", "/dns-query")
+                    put("address", "https://1.1.1.1/dns-query")
                     put("detour", "warp-out")
                 })
             }

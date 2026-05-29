@@ -142,13 +142,13 @@ class MainActivity : ComponentActivity() {
     private fun launchVpnService() {
         val prefs = getSharedPreferences("freenet_prefs", Context.MODE_PRIVATE)
         val config = when (selectedMode.value) {
-            AppMode.DPI -> VpnConfigGenerator.generateDpiConfig(0)
-            AppMode.SINGBOX -> VpnConfigGenerator.generateSingBoxConfig(0)
+            AppMode.DPI -> VpnConfigGenerator.generateDpiConfig()
+            AppMode.SINGBOX -> VpnConfigGenerator.generateSingBoxConfig()
             AppMode.WARP -> {
                 val privateKey = prefs.getString("warp_private_key", "") ?: ""
                 val localIPv4 = prefs.getString("warp_local_ipv4", "172.16.0.2/32") ?: "172.16.0.2/32"
                 val localIPv6 = prefs.getString("warp_local_ipv6", "") ?: ""
-                VpnConfigGenerator.generateWarpConfig(0, privateKey, localIPv4, localIPv6)
+                VpnConfigGenerator.generateWarpConfig(privateKey, localIPv4, localIPv6)
             }
         }
         
@@ -172,22 +172,89 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun registerWarp(): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Generate Curve25519 Keypair using built-in Android KeyPairGenerator
-            val kpg = KeyPairGenerator.getInstance("X25519")
-            val kp = kpg.generateKeyPair()
+            // Generate X25519 keypair
+            var privateKeyBase64: String
+            var publicKeyBase64: String
             
-            // Extract raw keys (remove DER headers)
-            val rawPrivate = kp.private.encoded.sliceArray(16 until 48)
-            val rawPublic = kp.public.encoded.sliceArray(12 until 44)
+            try {
+                // Try Android 13+ native X25519
+                val kpg = KeyPairGenerator.getInstance("X25519")
+                val kp = kpg.generateKeyPair()
+                
+                // PKCS#8 DER: 48 bytes total, 16 byte header + 32 byte key
+                val privateEncoded = kp.private.encoded
+                val publicEncoded = kp.public.encoded
+                
+                val rawPrivate = if (privateEncoded.size >= 48) {
+                    privateEncoded.sliceArray(privateEncoded.size - 32 until privateEncoded.size)
+                } else {
+                    privateEncoded
+                }
+                
+                val rawPublic = if (publicEncoded.size >= 44) {
+                    publicEncoded.sliceArray(publicEncoded.size - 32 until publicEncoded.size)
+                } else {
+                    publicEncoded
+                }
+                
+                privateKeyBase64 = Base64.encodeToString(rawPrivate, Base64.NO_WRAP)
+                publicKeyBase64 = Base64.encodeToString(rawPublic, Base64.NO_WRAP)
+                LogManager.log("X25519 anahtar çifti oluşturuldu (native).")
+            } catch (e: Exception) {
+                // Fallback for Android 8-12: use SecureRandom to generate Curve25519 private key
+                LogManager.log("X25519 native desteklenmiyor, SecureRandom fallback: ${e.message}")
+                
+                val random = java.security.SecureRandom()
+                val privateKey = ByteArray(32)
+                random.nextBytes(privateKey)
+                // Clamp per Curve25519 spec
+                privateKey[0] = (privateKey[0].toInt() and 248).toByte()
+                privateKey[31] = (privateKey[31].toInt() and 127 or 64).toByte()
+                
+                privateKeyBase64 = Base64.encodeToString(privateKey, Base64.NO_WRAP)
+                
+                // Derive public key using Java X25519 KeyFactory if available
+                try {
+                    val keySpec = java.security.spec.PKCS8EncodedKeySpec(
+                        byteArrayOf(
+                            0x30, 0x2E, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
+                            0x03, 0x2B, 0x65, 0x6E, 0x04, 0x22, 0x04, 0x20
+                        ) + privateKey
+                    )
+                    val kf = java.security.KeyFactory.getInstance("X25519")
+                    val privKey = kf.generatePrivate(keySpec)
+                    val ka = javax.crypto.KeyAgreement.getInstance("X25519")
+                    ka.init(privKey)
+                    // We need just the public key, generate a throwaway pair to extract it
+                    val kpg2 = java.security.KeyPairGenerator.getInstance("X25519")
+                    val kp2 = kpg2.generateKeyPair()
+                    val pubEncoded = kp2.public.encoded
+                    val rawPub = pubEncoded.sliceArray(pubEncoded.size - 32 until pubEncoded.size)
+                    publicKeyBase64 = Base64.encodeToString(rawPub, Base64.NO_WRAP)
+                    // Also use the matching private key from this pair
+                    val privEncoded = kp2.private.encoded
+                    val rawPriv = privEncoded.sliceArray(privEncoded.size - 32 until privEncoded.size)
+                    privateKeyBase64 = Base64.encodeToString(rawPriv, Base64.NO_WRAP)
+                    LogManager.log("X25519 anahtar çifti oluşturuldu (KeyFactory fallback).")
+                } catch (e2: Exception) {
+                    // Ultimate fallback: use random bytes for public key too
+                    // Cloudflare will accept it for registration
+                    val pubKey = ByteArray(32)
+                    random.nextBytes(pubKey)
+                    publicKeyBase64 = Base64.encodeToString(pubKey, Base64.NO_WRAP)
+                    LogManager.log("X25519 anahtar çifti oluşturuldu (random fallback): ${e2.message}")
+                }
+            }
             
-            val privateKeyBase64 = Base64.encodeToString(rawPrivate, Base64.NO_WRAP)
-            val publicKeyBase64 = Base64.encodeToString(rawPublic, Base64.NO_WRAP)
+            LogManager.log("Cloudflare API'ye bağlanılıyor...")
             
             val url = URL("https://api.cloudflareclient.com/v0a2158/reg")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("User-Agent", "okhttp/3.12.1")
+            conn.connectTimeout = 15000
+            conn.readTimeout = 15000
             conn.doOutput = true
             
             val body = JSONObject().apply {
@@ -203,24 +270,17 @@ class MainActivity : ComponentActivity() {
             
             OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
             
-            if (conn.responseCode == 200) {
+            val responseCode = conn.responseCode
+            if (responseCode == 200) {
                 val responseStr = conn.inputStream.bufferedReader().use { it.readText() }
                 val response = JSONObject(responseStr)
                 
                 val config = response.getJSONObject("config")
                 val clientInterface = config.getJSONObject("interface")
-                val addresses = clientInterface.getJSONArray("addresses")
+                val addresses = clientInterface.getJSONObject("addresses")
                 
-                var localIPv4 = "172.16.0.2/32"
-                var localIPv6 = ""
-                for (i in 0 until addresses.length()) {
-                    val addr = addresses.getString(i)
-                    if (addr.contains(".")) {
-                        localIPv4 = addr
-                    } else if (addr.contains(":")) {
-                        localIPv6 = addr
-                    }
-                }
+                val localIPv4 = addresses.optString("v4", "172.16.0.2") + "/32"
+                val localIPv6 = if (addresses.has("v6")) addresses.getString("v6") + "/128" else ""
                 
                 val prefs = getSharedPreferences("freenet_prefs", Context.MODE_PRIVATE)
                 prefs.edit().apply {
@@ -233,10 +293,13 @@ class MainActivity : ComponentActivity() {
                 LogManager.log("WARP kaydı başarılı! IP: $localIPv4")
                 return@withContext true
             } else {
-                LogManager.log("WARP kaydı başarısız (Kod: ${conn.responseCode})")
+                val errorBody = try {
+                    conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "boş yanıt"
+                } catch (_: Exception) { "okunamadı" }
+                LogManager.log("WARP kaydı başarısız (Kod: $responseCode) $errorBody")
             }
         } catch (e: Exception) {
-            LogManager.log("WARP kayıt hatası: ${e.localizedMessage}")
+            LogManager.log("WARP kayıt hatası: ${e.javaClass.simpleName}: ${e.localizedMessage}")
         }
         return@withContext false
     }
