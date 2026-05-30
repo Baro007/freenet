@@ -225,11 +225,19 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
             // DNS Servers
             val dnsBox = options.getDNSServerAddress()
             if (dnsBox != null && dnsBox.getValue().isNotEmpty()) {
-                builder.addDnsServer(dnsBox.getValue())
-                LogManager.log("[Tünel] DNS sunucusu: ${dnsBox.getValue()}")
+                val dnsAddr = dnsBox.getValue()
+                builder.addDnsServer(dnsAddr)
+                LogManager.log("[Tünel] DNS sunucusu: $dnsAddr")
+                
+                // If the DNS address from sing-box is IPv4, also add our IPv6 DNS server to prevent leaks
+                if (!dnsAddr.contains(":")) {
+                    builder.addDnsServer("fdfe:dcba:9876::2")
+                    LogManager.log("[Tünel] IPv6 DNS sunucusu sızıntı önleme amaçlı eklendi: fdfe:dcba:9876::2")
+                }
             } else {
-                builder.addDnsServer("1.1.1.1")
-                LogManager.log("[Tünel] DNS sunucusu (varsayılan): 1.1.1.1")
+                builder.addDnsServer("172.19.0.2")
+                builder.addDnsServer("fdfe:dcba:9876::2")
+                LogManager.log("[Tünel] Varsayılan DNS sunucuları eklendi (IPv4 & IPv6): 172.19.0.2, fdfe:dcba:9876::2")
             }
             
             // Exclude / Include apps

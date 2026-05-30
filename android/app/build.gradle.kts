@@ -176,6 +176,19 @@ tasks.register("printPlatformInterface") {
         } catch (e: Exception) {
             println("Error loading ConnectionOwner: ${e.message}")
         }
+
+        try {
+            val tunOptionsClass = classLoader.loadClass("io.nekohasekai.libbox.TunOptions")
+            println("=== io.nekohasekai.libbox.TunOptions Methods ===")
+            for (method in tunOptionsClass.getDeclaredMethods()) {
+                val retName = method.getReturnType().getName()
+                val mName = method.getName()
+                val params = method.getParameterTypes().map { it.getName() }.joinToString(", ")
+                println("$retName $mName($params)")
+            }
+        } catch (e: Exception) {
+            println("Error loading TunOptions: ${e.message}")
+        }
     }
 }
 

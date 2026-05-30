@@ -39,7 +39,7 @@ object VpnConfigGenerator {
             })
         })
 
-        // Direct outbound
+        // Outbounds
         root.put("outbounds", JSONArray().apply {
             put(JSONObject().apply {
                 put("type", "direct")
@@ -49,11 +49,20 @@ object VpnConfigGenerator {
                 put("type", "dns")
                 put("tag", "dns-out")
             })
+            put(JSONObject().apply {
+                put("type", "block")
+                put("tag", "block-out")
+            })
         })
 
         // Route
         root.put("route", JSONObject().apply {
             put("rules", JSONArray().apply {
+                // Block Private DNS (DoT) to force fallback to port 53
+                put(JSONObject().apply {
+                    put("port", JSONArray().put(853))
+                    put("outbound", "block-out")
+                })
                 // Intercept DNS from TUN
                 put(JSONObject().apply {
                     put("inbound", JSONArray().put("tun-in"))
@@ -73,6 +82,11 @@ object VpnConfigGenerator {
         // DNS
         root.put("dns", JSONObject().apply {
             put("servers", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("tag", "google-doh")
+                    put("address", "https://8.8.8.8/dns-query")
+                    put("detour", "direct-out")
+                })
                 put(JSONObject().apply {
                     put("tag", "cloudflare-doh")
                     put("address", "https://1.1.1.1/dns-query")
@@ -119,10 +133,19 @@ object VpnConfigGenerator {
                 put("type", "dns")
                 put("tag", "dns-out")
             })
+            put(JSONObject().apply {
+                put("type", "block")
+                put("tag", "block-out")
+            })
         })
 
         root.put("route", JSONObject().apply {
             put("rules", JSONArray().apply {
+                // Block Private DNS (DoT) to force fallback to port 53
+                put(JSONObject().apply {
+                    put("port", JSONArray().put(853))
+                    put("outbound", "block-out")
+                })
                 // Intercept DNS from TUN
                 put(JSONObject().apply {
                     put("inbound", JSONArray().put("tun-in"))
@@ -141,6 +164,11 @@ object VpnConfigGenerator {
 
         root.put("dns", JSONObject().apply {
             put("servers", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("tag", "google-doh")
+                    put("address", "https://8.8.8.8/dns-query")
+                    put("detour", "direct-out")
+                })
                 put(JSONObject().apply {
                     put("tag", "cloudflare-doh")
                     put("address", "https://1.1.1.1/dns-query")
@@ -203,10 +231,20 @@ object VpnConfigGenerator {
                 put("type", "dns")
                 put("tag", "dns-out")
             })
+            // Block outbound
+            put(JSONObject().apply {
+                put("type", "block")
+                put("tag", "block-out")
+            })
         })
 
         root.put("route", JSONObject().apply {
             put("rules", JSONArray().apply {
+                // Block Private DNS (DoT) to force fallback to port 53
+                put(JSONObject().apply {
+                    put("port", JSONArray().put(853))
+                    put("outbound", "block-out")
+                })
                 // Intercept DNS from TUN
                 put(JSONObject().apply {
                     put("inbound", JSONArray().put("tun-in"))
@@ -220,14 +258,19 @@ object VpnConfigGenerator {
         root.put("dns", JSONObject().apply {
             put("servers", JSONArray().apply {
                 put(JSONObject().apply {
+                    put("tag", "google-doh")
+                    put("address", "https://8.8.8.8/dns-query")
+                    put("detour", "warp-out")
+                })
+                put(JSONObject().apply {
                     put("tag", "cloudflare-doh")
                     put("address", "https://1.1.1.1/dns-query")
                     put("detour", "warp-out")
                 })
-                // Bootstrap DNS for resolving WARP endpoint
+                // Bootstrap DNS for resolving WARP endpoint (Google DNS)
                 put(JSONObject().apply {
                     put("tag", "bootstrap-dns")
-                    put("address", "1.1.1.1")
+                    put("address", "8.8.8.8")
                     put("detour", "direct-out")
                 })
             })
