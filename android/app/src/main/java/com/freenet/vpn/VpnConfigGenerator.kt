@@ -53,10 +53,19 @@ object VpnConfigGenerator {
 
         // Route
         root.put("route", JSONObject().apply {
+            put("auto_detect_interface", true)
             put("rules", JSONArray().apply {
+                // Intercept DNS from TUN
                 put(JSONObject().apply {
-                    put("protocol", JSONArray().put("dns"))
+                    put("inbound", JSONArray().put("tun-in"))
+                    put("port", JSONArray().put(53))
                     put("outbound", "dns-out")
+                })
+                // Apply TLS Fragmentation on Port 443
+                put(JSONObject().apply {
+                    put("port", JSONArray().put(443))
+                    put("action", "route-options")
+                    put("tls_record_fragment", true)
                 })
             })
             put("final", "direct-out")
@@ -114,10 +123,19 @@ object VpnConfigGenerator {
         })
 
         root.put("route", JSONObject().apply {
+            put("auto_detect_interface", true)
             put("rules", JSONArray().apply {
+                // Intercept DNS from TUN
                 put(JSONObject().apply {
-                    put("protocol", JSONArray().put("dns"))
+                    put("inbound", JSONArray().put("tun-in"))
+                    put("port", JSONArray().put(53))
                     put("outbound", "dns-out")
+                })
+                // Apply TLS Fragmentation on Port 443
+                put(JSONObject().apply {
+                    put("port", JSONArray().put(443))
+                    put("action", "route-options")
+                    put("tls_record_fragment", true)
                 })
             })
             put("final", "direct-out")
@@ -190,9 +208,12 @@ object VpnConfigGenerator {
         })
 
         root.put("route", JSONObject().apply {
+            put("auto_detect_interface", true)
             put("rules", JSONArray().apply {
+                // Intercept DNS from TUN
                 put(JSONObject().apply {
-                    put("protocol", JSONArray().put("dns"))
+                    put("inbound", JSONArray().put("tun-in"))
+                    put("port", JSONArray().put(53))
                     put("outbound", "dns-out")
                 })
             })
