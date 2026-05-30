@@ -53,7 +53,6 @@ object VpnConfigGenerator {
 
         // Route
         root.put("route", JSONObject().apply {
-            put("auto_detect_interface", true)
             put("rules", JSONArray().apply {
                 // Intercept DNS from TUN
                 put(JSONObject().apply {
@@ -123,7 +122,6 @@ object VpnConfigGenerator {
         })
 
         root.put("route", JSONObject().apply {
-            put("auto_detect_interface", true)
             put("rules", JSONArray().apply {
                 // Intercept DNS from TUN
                 put(JSONObject().apply {
@@ -208,7 +206,6 @@ object VpnConfigGenerator {
         })
 
         root.put("route", JSONObject().apply {
-            put("auto_detect_interface", true)
             put("rules", JSONArray().apply {
                 // Intercept DNS from TUN
                 put(JSONObject().apply {

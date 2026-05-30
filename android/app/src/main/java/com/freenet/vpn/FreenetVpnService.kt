@@ -326,9 +326,11 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
     override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener?) {
         LogManager.log("[Platform] startDefaultInterfaceMonitor() çağrıldı")
     }
+
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener?) {
         LogManager.log("[Platform] closeDefaultInterfaceMonitor() çağrıldı")
     }
+
     override fun includeAllNetworks(): Boolean = false
     override fun localDNSTransport(): LocalDNSTransport? = null
     override fun readWIFIState(): WIFIState? = null
@@ -442,5 +444,22 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
                 LogManager.log("[Service] Stop servisi başlatma hatası: ${e.message}")
             }
         }
+    }
+}
+
+class MyStringIterator(private val list: List<String>) : io.nekohasekai.libbox.StringIterator {
+    private var index = 0
+    override fun hasNext(): Boolean = index < list.size
+    override fun len(): Int = list.size
+    override fun next(): String {
+        return if (index < list.size) list[index++] else ""
+    }
+}
+
+class MyNetworkInterfaceIterator(private val list: List<io.nekohasekai.libbox.NetworkInterface>) : io.nekohasekai.libbox.NetworkInterfaceIterator {
+    private var index = 0
+    override fun hasNext(): Boolean = index < list.size
+    override fun next(): io.nekohasekai.libbox.NetworkInterface? {
+        return if (index < list.size) list[index++] else null
     }
 }
