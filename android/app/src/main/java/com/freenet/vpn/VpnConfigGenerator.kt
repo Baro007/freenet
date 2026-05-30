@@ -84,13 +84,24 @@ object VpnConfigGenerator {
             put("servers", JSONArray().apply {
                 put(JSONObject().apply {
                     put("tag", "google-doh")
-                    put("address", "https://8.8.8.8/dns-query")
+                    put("address", "https://dns.google/dns-query")
                     put("detour", "direct-out")
                 })
                 put(JSONObject().apply {
                     put("tag", "cloudflare-doh")
-                    put("address", "https://1.1.1.1/dns-query")
+                    put("address", "https://cloudflare-dns.com/dns-query")
                     put("detour", "direct-out")
+                })
+                put(JSONObject().apply {
+                    put("tag", "bootstrap-dns")
+                    put("address", "8.8.8.8")
+                    put("detour", "direct-out")
+                })
+            })
+            put("rules", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("domain", JSONArray().put("dns.google").put("cloudflare-dns.com"))
+                    put("server", "bootstrap-dns")
                 })
             })
             put("strategy", "ipv4_only")
@@ -166,13 +177,24 @@ object VpnConfigGenerator {
             put("servers", JSONArray().apply {
                 put(JSONObject().apply {
                     put("tag", "google-doh")
-                    put("address", "https://8.8.8.8/dns-query")
+                    put("address", "https://dns.google/dns-query")
                     put("detour", "direct-out")
                 })
                 put(JSONObject().apply {
                     put("tag", "cloudflare-doh")
-                    put("address", "https://1.1.1.1/dns-query")
+                    put("address", "https://cloudflare-dns.com/dns-query")
                     put("detour", "direct-out")
+                })
+                put(JSONObject().apply {
+                    put("tag", "bootstrap-dns")
+                    put("address", "8.8.8.8")
+                    put("detour", "direct-out")
+                })
+            })
+            put("rules", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("domain", JSONArray().put("dns.google").put("cloudflare-dns.com"))
+                    put("server", "bootstrap-dns")
                 })
             })
             put("strategy", "ipv4_only")
@@ -259,15 +281,15 @@ object VpnConfigGenerator {
             put("servers", JSONArray().apply {
                 put(JSONObject().apply {
                     put("tag", "google-doh")
-                    put("address", "https://8.8.8.8/dns-query")
+                    put("address", "https://dns.google/dns-query")
                     put("detour", "warp-out")
                 })
                 put(JSONObject().apply {
                     put("tag", "cloudflare-doh")
-                    put("address", "https://1.1.1.1/dns-query")
+                    put("address", "https://cloudflare-dns.com/dns-query")
                     put("detour", "warp-out")
                 })
-                // Bootstrap DNS for resolving WARP endpoint (Google DNS)
+                // Bootstrap DNS for resolving domains
                 put(JSONObject().apply {
                     put("tag", "bootstrap-dns")
                     put("address", "8.8.8.8")
@@ -275,13 +297,16 @@ object VpnConfigGenerator {
                 })
             })
             put("rules", JSONArray().apply {
-                // WARP endpoint domain resolves via bootstrap (direct), not via warp itself
                 put(JSONObject().apply {
-                    put("domain", JSONArray().put("engage.cloudflareclient.com"))
+                    put("domain", JSONArray().apply {
+                        put("engage.cloudflareclient.com")
+                        put("dns.google")
+                        put("cloudflare-dns.com")
+                    })
                     put("server", "bootstrap-dns")
                 })
             })
-            put("strategy", "ipv4_only")
+            // Omit strategy here to allow IPv6 resolving for WARP endpoints and fallback
         })
 
         return root.toString(2)
