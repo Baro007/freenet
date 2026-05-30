@@ -22,7 +22,8 @@ android {
             useSupportLibrary = true
         }
         ndk {
-            abiFilters.add("arm64-v8a")
+            // arm64-v8a for physical devices and arm64 Mac emulators
+            abiFilters.addAll(listOf("arm64-v8a"))
         }
     }
 
@@ -158,6 +159,22 @@ tasks.register("printPlatformInterface") {
             }
         } catch (e: Exception) {
             println("Error loading StringIterator: ${e.message}")
+        }
+
+        try {
+            val connectionOwnerClass = classLoader.loadClass("io.nekohasekai.libbox.ConnectionOwner")
+            println("=== io.nekohasekai.libbox.ConnectionOwner Methods and Constructors ===")
+            for (constructor in connectionOwnerClass.getDeclaredConstructors()) {
+                println("Constructor: $constructor")
+            }
+            for (method in connectionOwnerClass.getDeclaredMethods()) {
+                val retName = method.getReturnType().getName()
+                val mName = method.getName()
+                val params = method.getParameterTypes().map { it.getName() }.joinToString(", ")
+                println("$retName $mName($params)")
+            }
+        } catch (e: Exception) {
+            println("Error loading ConnectionOwner: ${e.message}")
         }
     }
 }

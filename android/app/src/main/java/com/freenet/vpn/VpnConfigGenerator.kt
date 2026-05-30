@@ -32,9 +32,10 @@ object VpnConfigGenerator {
                 put("tag", "tun-in")
                 put("inet4_address", "172.19.0.1/30")
                 put("inet6_address", "fdfe:dcba:9876::1/126")
-                put("mtu", 9000)
+                put("mtu", 1500)
                 put("stack", "mixed")
                 put("sniff", true)
+                put("sniff_override_destination", false)
             })
         })
 
@@ -94,9 +95,10 @@ object VpnConfigGenerator {
                 put("tag", "tun-in")
                 put("inet4_address", "172.19.0.1/30")
                 put("inet6_address", "fdfe:dcba:9876::1/126")
-                put("mtu", 9000)
+                put("mtu", 1500)
                 put("stack", "mixed")
                 put("sniff", true)
+                put("sniff_override_destination", true)
             })
         })
 
@@ -188,7 +190,6 @@ object VpnConfigGenerator {
         })
 
         root.put("route", JSONObject().apply {
-            put("default_mark", 51820)
             put("rules", JSONArray().apply {
                 put(JSONObject().apply {
                     put("protocol", JSONArray().put("dns"))
@@ -205,10 +206,10 @@ object VpnConfigGenerator {
                     put("address", "https://1.1.1.1/dns-query")
                     put("detour", "warp-out")
                 })
-                // Fallback DNS for WARP endpoint resolution using native local resolver
+                // Bootstrap DNS for resolving WARP endpoint
                 put(JSONObject().apply {
-                    put("type", "local")
                     put("tag", "bootstrap-dns")
+                    put("address", "1.1.1.1")
                     put("detour", "direct-out")
                 })
             })

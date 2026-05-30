@@ -3,7 +3,9 @@ package com.freenet.vpn
 import android.content.Context
 import android.content.Intent
 import android.net.VpnService
+import android.os.Build
 import android.os.ParcelFileDescriptor
+import androidx.core.content.ContextCompat
 import io.nekohasekai.libbox.*
 
 class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler {
@@ -74,18 +76,21 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
             commandServer?.start()
             LogManager.log("[Service] CommandServer başlatıldı.")
             
+            // Start foreground notification BEFORE starting VPN service
+            // This is critical: Android requires startForeground() within 5 seconds of startForegroundService()
+            startForegroundNotification()
+            LogManager.log("[Service] Foreground bildirim oluşturuldu.")
+            
             // Start service with config
             LogManager.log("[Service] Servis başlatılıyor (startOrReloadService)...")
             val overrideOptions = OverrideOptions()
             commandServer?.startOrReloadService(config, overrideOptions)
             
             LogManager.log("[Service] ✓ Freenet VPN aktif!")
-            
-            // Start foreground notification
-            startForegroundNotification()
-            LogManager.log("[Service] Foreground bildirim oluşturuldu.")
+            isServiceRunning = true
             
         } catch (e: Exception) {
+            isServiceRunning = false
             LogManager.log("[Service] ✗ HATA: VPN başlatılamadı!")
             LogManager.log("[Service]   Hata tipi: ${e.javaClass.simpleName}")
             LogManager.log("[Service]   Hata mesajı: ${e.localizedMessage}")
@@ -103,6 +108,7 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
 
     private fun stopVpn() {
         LogManager.log("[Service] VPN durduruluyor...")
+        isServiceRunning = false
         try {
             commandServer?.closeService()
             commandServer?.close()
@@ -120,7 +126,12 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
             LogManager.log("[Service] Tünel kapatma hatası: ${e.message}")
         }
         
-        stopForeground(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         LogManager.log("[Service] Bağlantı durduruldu.")
     }
 
@@ -278,11 +289,40 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
         LogManager.log("[Platform] Bildirim: ${notification?.toString() ?: "boş"}")
     }
 
-    override fun usePlatformAutoDetectInterfaceControl(): Boolean = false
+    override fun usePlatformAutoDetectInterfaceControl(): Boolean = true
     override fun clearDNSCache() {
         LogManager.log("[Platform] clearDNSCache() çağrıldı")
     }
-    override fun findConnectionOwner(p0: Int, p1: String?, p2: Int, p3: String?, p4: Int): ConnectionOwner? = null
+    override fun findConnectionOwner(
+        protocol: Int,
+        srcAddress: String?,
+        srcPort: Int,
+        dstAddress: String?,
+        dstPort: Int
+    ): ConnectionOwner {
+        val owner = ConnectionOwner()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            if (cm != null && srcAddress != null && dstAddress != null) {
+                try {
+                    val local = java.net.InetSocketAddress(java.net.InetAddress.getByName(srcAddress), srcPort)
+                    val remote = java.net.InetSocketAddress(java.net.InetAddress.getByName(dstAddress), dstPort)
+                    val uid = cm.getConnectionOwnerUid(protocol, local, remote)
+                    if (uid != android.os.Process.INVALID_UID) {
+                        owner.userId = uid
+                        val pm = packageManager
+                        val packages = pm.getPackagesForUid(uid)
+                        if (!packages.isNullOrEmpty()) {
+                            owner.androidPackageName = packages[0]
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignore
+                }
+            }
+        }
+        return owner
+    }
     override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener?) {
         LogManager.log("[Platform] startDefaultInterfaceMonitor() çağrıldı")
     }
@@ -372,13 +412,23 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
         private const val CHANNEL_ID = "freenet_vpn_channel"
         private const val NOTIFICATION_ID = 1001
 
+        private val _serviceState = kotlinx.coroutines.flow.MutableStateFlow(false)
+        val serviceState: kotlinx.coroutines.flow.StateFlow<Boolean> = _serviceState
+
+        @Volatile
+        var isServiceRunning = false
+            set(value) {
+                field = value
+                _serviceState.value = value
+            }
+
         fun start(context: Context, configuration: String) {
             LogManager.log("[Service] start() çağrıldı, config boyutu: ${configuration.length}")
             val intent = Intent(context, FreenetVpnService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_CONFIG, configuration)
             }
-            context.startService(intent)
+            ContextCompat.startForegroundService(context, intent)
         }
 
         fun stop(context: Context) {
@@ -386,7 +436,11 @@ class FreenetVpnService : VpnService(), PlatformInterface, CommandServerHandler 
             val intent = Intent(context, FreenetVpnService::class.java).apply {
                 action = ACTION_STOP
             }
-            context.startService(intent)
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {
+                LogManager.log("[Service] Stop servisi başlatma hatası: ${e.message}")
+            }
         }
     }
 }

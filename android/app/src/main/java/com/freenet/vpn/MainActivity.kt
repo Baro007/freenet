@@ -52,6 +52,11 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyPairGenerator
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 enum class AppMode(val title: String, val desc: String, val accentColor: Color) {
     DPI("DPI Modu (Yerel)", "TCP el sıkışmasını bölerek sansürü sıfır hız kaybıyla aşar.", Color(0xFFFF9800)),
@@ -92,6 +97,18 @@ class MainActivity : ComponentActivity() {
         LogManager.logSystemInfo()
         LogManager.log("[UI] Uygulama başlatıldı.")
         
+        // Request notification permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    1001
+                )
+            }
+        }
+        
         // Load initial state
         val prefs = getSharedPreferences("freenet_prefs", Context.MODE_PRIVATE)
         isConnected.value = prefs.getBoolean("is_connected", false)
@@ -104,6 +121,16 @@ class MainActivity : ComponentActivity() {
         }
         
         LogManager.log("[UI] Kayıtlı mod: ${selectedMode.value.name}, Bağlantı: ${isConnected.value}")
+
+        lifecycleScope.launch {
+            FreenetVpnService.serviceState.collect { running ->
+                if (isConnected.value != running) {
+                    LogManager.log("[UI] Servis durumu değişti: $running")
+                    isConnected.value = running
+                    prefs.edit().putBoolean("is_connected", running).apply()
+                }
+            }
+        }
 
         setContent {
             FreenetTheme {
@@ -214,7 +241,7 @@ class MainActivity : ComponentActivity() {
         prefs.edit().putBoolean("is_connected", false).apply()
     }
 
-    private val lifecycleScope get() = (this as ComponentActivity).lifecycleScope
+
 
     private suspend fun registerWarp(): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -544,7 +571,7 @@ fun MainScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                AppMode.values().forEach { mode ->
+                AppMode.entries.forEach { mode ->
                     val isModeSelected = selectedMode == mode
                     Box(
                         modifier = Modifier
