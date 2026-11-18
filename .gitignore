@@ -1,10 +1,38 @@
-.gradle/
-**/build/
-!**/build/outputs/apk/debug/app-debug.apk
-local.properties
+# macOS
 .DS_Store
-*.iml
-.idea/
-build/
+**/.DS_Store
+
+# Build
 app/build/
-!app/build/outputs/apk/debug/app-debug.apk
+*.o
+*.app/
+!app/Info.plist.template
+
+# Machine-specific Homebrew Tor binary (built/linked per host by build.sh)
+app/Resources/bin/tor
+
+# Xcode / SPM
+.derivedData/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Secrets / local
+*.pem
+*.p12
+.env
+.idea/
+.vscode/
+
+# Android (removed — never re-add)
+android/
+**/android/
+
+# Temp
+/tmp/
+*.log
+
+# Test artifacts
+app/Tests/freenet_logic_tests
+app/Tests/last-run.log
+app/Tests/*.log

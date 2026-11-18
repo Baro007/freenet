@@ -28,3 +28,17 @@ Touch only what you must. Clean up only your own mess.
 Define success criteria. Loop until verified.
 - Write tests/verification checks before changing code.
 - Strong success criteria let the LLM loop independently.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues for `Baro007/freenet`. External pull requests are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The repository uses the canonical Matt Pocock triage labels without aliases. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository with `CONTEXT.md` at the root and ADRs under `docs/adr/`. See `docs/agents/domain.md`.

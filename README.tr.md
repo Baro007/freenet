@@ -1,89 +1,79 @@
-# 🛡️ Freenet (macOS)
+# Freenet (macOS)
 
 <p align="center">
-  <img src="assets/banner.png" alt="Freenet Afiş" width="100%">
+  <img src="assets/banner.png" alt="Freenet Banner" width="100%">
 </p>
 
 <p align="center">
-  <a href="https://img.shields.io/badge/Platform-macOS%2013.0+-apple?style=flat-square&logo=apple"><img src="https://img.shields.io/badge/Platform-macOS%2013.0+-apple?style=flat-square&logo=apple"></a>
-  <a href="https://img.shields.io/badge/Swift-5.0-orange?style=flat-square&logo=swift"><img src="https://img.shields.io/badge/Swift-5.0-orange?style=flat-square&logo=swift"></a>
-  <a href="https://img.shields.io/badge/License-MIT-green?style=flat-square"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square"></a>
+  <a href="https://img.shields.io/badge/Platform-macOS%2013.0+%20(Universal)-apple?style=flat-square&logo=apple"><img src="https://img.shields.io/badge/Platform-macOS%2013.0+%20(Universal)-apple?style=flat-square&logo=apple"></a>
+  <a href="https://img.shields.io/badge/Sürüm-1.2.0-orange?style=flat-square"><img src="https://img.shields.io/badge/Sürüm-1.2.0-orange?style=flat-square"></a>
+  <a href="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white"><img src="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white"></a>
+  <a href="https://img.shields.io/badge/Lisans-MIT-green?style=flat-square"><img src="https://img.shields.io/badge/Lisans-MIT-green?style=flat-square"></a>
 </p>
 
-<h3 align="center">Sansürü aşın. Hesap yok. Abonelik yok. Sadece tıklayın.</h3>
+<h3 align="center">Ücretsiz. Açık kaynak. Niyet tabanlı. Sansür aşımı <em>veya</em> gerçek anonimlik — sen seçersin.</h3>
 
-Freenet, macOS için özel olarak Swift ile geliştirilmiş, **sıfır ayar** gerektiren hibrit bir internet özgürlüğü aracıdır. Efsanevi GoodbyeDPI projesinden ilham alınarak Mac menü çubuğuna (menubar) kusursuzca entegre edilmiştir. 
+Freenet, macOS (Apple Silicon & Intel Universal Binary) için **sıfır yapılandırmalı**, native SwiftUI bir internet özgürlüğü aracıdır. Menü çubuğunda yaşar, tek tıkla bağlanır ve hız, IP maskeleme ile gerçek anonimlik arasındaki sınırı dürüstçe ayırır. **Yalnızca macOS.**
 
-🇬🇧 **[Click here for English Documentation](README.md)**
-
----
-
-## ✨ Neden Freenet? (Nasıl Çalışır?)
-
-Sansür sistemleri tek tip değildir. Freenet, karşılaştığınız engele göre kullanabileceğiniz üç farklı motor sunar:
-
-### 1. 🚀 DPI Modu (Hız ve Performans Odaklı)
-*   **Sorun:** Türkiye'deki sansür sistemi genellikle bir kargocu (İSS) gibi çalışır. Paketin üstünde "yasaklisite.com" yazıyorsa kargoyu çöpe atar (DPI - Derin Paket İncelemesi).
-*   **Çözüm:** Freenet DPI modunu açtığınızda arka planda paketinizin üzerindeki yazıyı jiletle keser. "yasak" ve "lisite.com" olarak iki ayrı parça halinde gönderir. İSS'nin filtreleri bu kopuk parçaları okuyamadığı için paketin geçişine izin verir.
-*   **Sihir:** Trafiğiniz hiçbir aracı sunucuya (VPN'e) gitmez! Bağlantınız doğrudan karşı tarafadır. Bu yüzden **%0 hız kaybı** yaşarsınız. Hız testiniz 100 Mbps ise, yasaklı siteye de 100 Mbps ile girersiniz. *(Not: IP adresiniz gizlenmez, sadece sansürü atlatır).*
-
-### 2. 🌍 WARP Tünel Modu (Ağır Zırhlı Mod)
-*   **Sorun:** Bazen devletler sadece isimden değil, sitenin doğrudan adresinden (IP Ban) engelleme yapar. Bu durumda kargo etiketini parçalamak işe yaramaz.
-*   **Çözüm:** Freenet, dünyanın en büyük internet altyapılarından biri olan Cloudflare sunucularına doğrudan şifreli bir "boru" (WireGuard Tüneli) döşer. Sizin tüm trafiğiniz bu aşılmaz borunun içinden geçer.
-*   **Sihir:** IP banlı siteleri anında açar. Sizi anonim yapar (IP adresiniz Cloudflare'in IP'si gibi görünür). Ortak Wi-Fi ağlarında sizi bilgisayar korsanlarından korur.
-
-### 3. 🛡️ sing-box Modu (Gelişmiş Tünel ve TLS Fragmantasyonu)
-*   **Sorun:** Bazı gelişmiş sansür mekanizmaları, standart paket bölme (DPI modu) veya genel VPN tünellerini tespit edip engelleyecek düzeyde akıllı SNI filtrelerine ve derin paket inceleme sistemlerine sahiptir.
-*   **Çözüm:** Freenet, yerel bir `sing-box` motoru başlatır (SOCKS5 port `1081`). Bu modda, 443 portu üzerinden giden trafiğe gelişmiş **TLS El Sıkışma Fragmantasyonu (TLS Record Fragmentation)** uygular ve şifreli **DNS-over-HTTPS (DoH)** protokolünü (Cloudflare üzerinden) devreye sokar.
-*   **Sihir:** TLS el sıkışma paketlerini küçük parçalara bölerek gelişmiş sansür filtrelerinin aklını karıştırır ve bağlantının engellenmesini önler. DoH ise DNS zehirlemelerini engeller. Herhangi bir VPN sunucusuna bağlanmadan ve ek hız kaybı yaşamadan sansürü aşmanızı sağlar.
+🇬🇧 **[English README](README.md)** · 📋 **[Yol Haritası](ROADMAP.md)** · 🛡️ **[Tehdit Modeli](docs/THREAT_MODEL.md)** · 🔧 **[Derleme Rehberi](docs/BUILD.md)**
 
 ---
 
-## 🎩 Freenet'in "Sihirli" Özellikleri
+## Üç Niyet (Dürüst Seçim)
 
-Freenet sadece bir komut aracı değil, Mac'inizin yerleşik bir parçası gibi hissettiren bir otopilottur.
+Freenet **tek düğmede hem tam hız hem tam anonimlik** vaat etmez. Açık bir **niyet** seçersin:
 
-*   **⚡ Sıfır Sürtünme Kurulum:** Yeni bir kullanıcı "Tünel Modu"na ilk bastığında, Freenet arkada sessizce gerekli programları (Homebrew, wireguard) indirir, Cloudflare'e bağlanıp ücretsiz profil oluşturur. Sizin Terminal'e tek bir kod yazmanıza gerek kalmaz.
-*   **🔓 Şifresiz Geçiş (Tek Tık):** Normalde ağ ayarlarını değiştirmek Mac'te sürekli şifre ister. Freenet, ilk kurulumda sisteme güvenli bir izin bırakır. Artık VPN açıp kapatmak saniyeler sürer, asla şifre sormaz.
-*   **🧠 Kendi Kendini İyileştirme (Self-Healing):** Mac'in kapağını kapattınız veya Wi-Fi ağı değiştirdiniz ve bağlantı koptu mu? Freenet bunu saliseler içinde fark edip Tünel'i kendi kendine yeniden başlatır. Asla internetsiz kalmazsınız.
-*   **📊 Canlı Dashboard:** Teknik detayları sevenler için arkada paketlerin nasıl parçalandığını gösteren "Matrix" tarzı canlı bir log ekranı sunar.
+| Niyet | Motorlar | Neyi korur | Neyi **korumaz** |
+|-------|----------|------------|------------------|
+| **Hızlı** | **sing-box** (`Hibrit Zırh`: sing-box + `ciadpi` veya saf TLS/TCP fragment) | Tam hat hızında DPI/SNI/HTTP-80 sansür aşımı + şifreli DoH DNS kalkanı (zararlı/reklam engel) + QUIC/BTK engel | IP gizlemez; anonimlik **yok** |
+| **Dengeli** | **WARP** (`sing-box` yerel WireGuard varsayılan veya tam cihaz `wg-quick` L3 tünel) | IP maskeler, IP banlarını aşar, tünel içi DoH kalkanı, çoklu IP/port yedekleme (`500`/`4500`/`1701`/`2408`) + `MTU 1380` | **Anonim değildir** — Cloudflare gerçek IP ve hedefleri görür |
+| **Maks. Gizlilik** | **Tor** (+ isteğe bağlı `obfs4`/`snowflake` köprüleri) | Canlı `check.torproject.org` doğrulamalı çok-sıçramalı gerçek anonimlik | Yüksek hız; bazı siteler Tor çıkışını engeller |
+
+> **Gerçek anonimlik yalnızca Maks. Gizlilik (Tor) niyetindedir.**  
+> WARP, **tek operatöre (Cloudflare) güven** modeliyle ücretsiz IP maskelemedir; anonimlik değildir.
 
 ---
 
-## 📦 Tek Komutla Kurulum
+## Öne Çıkan Özellikler (v1.2.0)
 
-Freenet'i kurmak için Mac'inizde Terminal'i (`Uygulamalar > İzlenceler > Terminal`) açın ve şu tek satır kodu yapıştırıp Enter'a basın:
+### Güçlendirilmiş Hızlı Mod (VPN'siz Tam Hat Hızı)
+- **Hibrit Zırh (`sing-box 1081 → ciadpi 1082`)** *(varsayılan)*: `sing-box` tarafında şifreli DoH, `HTTPS`/`SVCB` + QUIC/UDP:443 engeli, `port 53` DNS kaçak koruması (`hijack-dns`) ve BTK/reklam IP reddi (`195.175.254.2`, `0.0.0.0/8`); `ciadpi` tarafında ise 3 kademeli otomatik DPI desync (`-r 1+s`, `-s 1+s`, `-d 1`, HTTP:80 Host koruması `-M h`, `-L 3` sıralama ve 1 saat IP önbelleği).
+- **Ayarlar'da 3 Anti-DPI katmanı:** `Hibrit Zırh`, `TLS Record (Hızlı)`, `TCP Fragment (Sert DPI)`.
+- **5 Şifreli DoH DNS Kalkanı + Otomatik Yedekleme:** Cloudflare Güvenlik (`1.1.1.2` zararlı engel), AdGuard Kalkan (`94.140.14.14` reklam+izleyici+zararlı engel), Cloudflare Hızlı (`1.1.1.1`), Quad9 (`9.9.9.9`) ve Google (`8.8.8.8`), `4096` DNS önbelleği ve `.local`/`.test`/LAN yerel geçişi.
+- **Mixed Proxy (`SOCKS5 + HTTP + HTTPS`):** Tek yerel port (`127.0.0.1:1081`), dinamik ağ arayüzü algılama (`Wi-Fi`, `USB LAN`, `Ethernet`) ve LAN bypass listesi.
+
+### İyileştirilmiş Dengeli Mod (Çift Motorlu WARP)
+- **`sing-box WARP` *(varsayılan, önerilen)*:** Gömülü `sing-box` içinde native WireGuard (`127.0.0.1:1083`) — root gerektirmez, sistem `utun` yönlendirmesini bozmaz (yerel sunucuları ve `cloudflared` tünellerini koparmaz), `162.159.193.1` / `162.159.192.1` × `500`/`4500`/`1701`/`2408` üzerinde canlı `warp=on` doğrulamalı otomatik yedekleme + tünel içi şifreli DoH.
+- **`Sistem Tüneli (wg-quick)`:** Proxy okumayan uygulamalar için tam cihaz L3 `utun` tüneli (`MTU 1380`, `PersistentKeepalive 25`, alternatif `162.159.193.1` ucu, DNS kalkanı uyumu ve açılışta `warp=on` kontrolü).
+
+### Native macOS Mimarisi
+- **Universal Binary (`arm64` + `x86_64`)** — Apple Silicon ve Intel Mac'ler için tek paket.
+- **Sıfır alt-süreçli izleme:** `getifaddrs()`, `CFNetworkCopySystemProxySettings()` ve POSIX non-blocking TCP `connect()` ile düşük CPU/pil tüketimi.
+- **Sıcak Mod Geçişi (Hot-Swap):** Bağlıyken bağlantıyı elle kapatmadan niyetler arası anında geçiş.
+- **Güvenlik:** SHA-256 doğrulama (`CHECKSUMS.sha256`), katı `DPIArgsValidator` + zorunlu `127.0.0.1` dinleme, daraltılmış `sudoers`, self-heal ve yetim proxy temizliği.
+
+---
+
+## Kaynaktan Kurulum ve Test
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Baro007/freenet/main/install.sh | bash
+git clone https://github.com/Baro007/freenet.git
+cd freenet/app
+./Tests/run_tests.sh   # 88 saf mantık testi
+./build.sh             # Universal macOS paketi: build/freenet.app
+open build/freenet.app
 ```
 
-*Bu komut uygulamayı indirecek, derleyecek ve `Uygulamalar` klasörünüze yerleştirip otomatik başlatacaktır.*
+**Gereksinimler:** macOS 13+, Xcode Command Line Tools (`swiftc`).
 
-## 📱 Android Sürümü (Beta)
-
-Freenet artık Android platformunda! Canlı bağlantı logları, entegre `sing-box` çekirdeği (`libbox-android` aracılığıyla) ve macOS sürümündeki 3 sansür aşım modunun (DPI, WARP ve sing-box) tamamını içeren modern bir Jetpack Compose arayüzüne sahiptir.
-
-### Özellikler
-*   **Sıfır Ayar:** Yükleyin ve tek tıkla bağlanın.
-*   **Log Kopyalama ve Paylaşma:** Hataları kolayca teşhis edebilmeniz için cihaz/sistem bilgilerini otomatik içeren kopyalanabilir ve paylaşılabilir log sistemi.
-*   **Boyut Optimizasyonu:** ARM64-v8a cihazlar için optimize edilmiş mimari ile küçük boyut (~58 MB).
-
-### Kendiniz Derlemek İçin
-APK dosyasını kendi bilgisayarınızda derlemek için Java 17+ ve Android SDK kurulu olmalıdır:
-```bash
-cd android
-./gradlew assembleDebug
-```
-Derlenen APK dosyası şu konumda oluşacaktır: `android/app/build/outputs/apk/debug/app-debug.apk`.
+- **Hızlı:** Kurulumsuz hemen çalışır (`sing-box` ve `ciadpi` gömülü + SHA-256 doğrulamalı).
+- **Dengeli (WARP):** `~/.config/wireguard/wgcf.conf` kullanır (Homebrew `wgcf` varsa otomatik oluşturur).
+- **Maks. Gizlilik (Tor):** `tor` gerektirir (`brew install tor` veya `app/Resources/bin/tor`). İkili yoksa uygulama **bağlıymış gibi yalan söylemez**.
 
 ---
 
-## 🤝 Krediler ve İlham Kaynakları
-- [ciadpi (ByeDPI)](https://github.com/hufrea/byedpi) - Çekirdek DPI atlatma motoru.
-- [WireGuard](https://www.wireguard.com/) & [Cloudflare WARP](https://1.1.1.1/) - Tünel altyapısı.
-- [GoodbyeDPI-Turkey](https://github.com/cagritaskn/GoodbyeDPI-Turkey) & [SplitWire-Turkey](https://github.com/a-mertdincer/SplitWire-Turkey-macOS) - Fikir ve ilham kaynakları.
+## Güvenlik ve Lisans
 
-## 📝 Lisans
-MIT License. Detaylar için [LICENSE](LICENSE) dosyasına bakabilirsiniz.
-
+- Açık kaynak (MIT) — telemetri, analiz, hesap veya ücretli katman yoktur.
+- Ayrıntılı analiz için [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) ve [docs/BUILD.md](docs/BUILD.md) belgelerine bakın.
+- Lisans: MIT — [LICENSE](LICENSE).

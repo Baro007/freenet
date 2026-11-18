@@ -1,0 +1,28 @@
+name: macOS CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run pure-logic unit tests
+        run: |
+          cd app
+          chmod +x Tests/run_tests.sh
+          ./Tests/run_tests.sh
+
+      - name: Verify Universal Binary build (arm64 + x86_64)
+        run: |
+          cd app
+          chmod +x build.sh
+          ./build.sh
+          lipo -info build/freenet.app/Contents/MacOS/freenet
+          (cd Resources/bin && shasum -a 256 -c CHECKSUMS.sha256)

@@ -1,90 +1,93 @@
-# 🛡️ Freenet (macOS)
+# Freenet (macOS)
 
 <p align="center">
   <img src="assets/banner.png" alt="Freenet Banner" width="100%">
 </p>
 
 <p align="center">
-  <a href="https://img.shields.io/badge/Platform-macOS%2013.0+-apple?style=flat-square&logo=apple"><img src="https://img.shields.io/badge/Platform-macOS%2013.0+-apple?style=flat-square&logo=apple"></a>
-  <a href="https://img.shields.io/badge/Swift-5.0-orange?style=flat-square&logo=swift"><img src="https://img.shields.io/badge/Swift-5.0-orange?style=flat-square&logo=swift"></a>
+  <a href="https://img.shields.io/badge/Platform-macOS%2013.0+%20(Universal)-apple?style=flat-square&logo=apple"><img src="https://img.shields.io/badge/Platform-macOS%2013.0+%20(Universal)-apple?style=flat-square&logo=apple"></a>
+  <a href="https://img.shields.io/badge/Version-1.2.0-orange?style=flat-square"><img src="https://img.shields.io/badge/Version-1.2.0-orange?style=flat-square"></a>
+  <a href="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white"><img src="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white"></a>
   <a href="https://img.shields.io/badge/License-MIT-green?style=flat-square"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square"></a>
-  <a href="https://img.shields.io/badge/Status-Active-success?style=flat-square"><img src="https://img.shields.io/badge/Status-Active-success?style=flat-square"></a>
 </p>
 
-<h3 align="center">Bypass censorship. No account. No subscription. Just click.</h3>
+<h3 align="center">Free. Open. Intent-based. Censorship bypass <em>or</em> real anonymity — you choose.</h3>
 
-Freenet is the ultimate, **zero-configuration** hybrid internet censorship bypass tool for macOS. Inspired by the legendary GoodbyeDPI, but custom-built natively in Swift for Mac. It lives quietly in your menubar and frees your internet with a single click.
+Freenet is a **zero-configuration**, native SwiftUI internet freedom tool for macOS (Apple Silicon & Intel Universal Binary). It lives in the menubar, connects with a single click, and never blurs the line between speed, IP masking, and anonymity. **macOS only.**
 
-🇹🇷 **[Türkçe dokümantasyon ve Rehber için tıklayın (Turkish README)](README.tr.md)**
-
----
-
-## ✨ Why Freenet? (The Three Engines)
-
-Censorship systems vary. Freenet provides three specialized engines to defeat them, giving you the best option for any scenario:
-
-### 1. 🚀 DPI Mode (Zero Speed Loss)
-*   **The Problem:** Your Internet Service Provider (ISP) acts like a mailman inspecting the label on your packages. If it says "youtube.com", they throw it away (Deep Packet Inspection).
-*   **The Freenet Solution:** Freenet slices that label into tiny pieces ("you" + "tube.com") using a local engine (`ciadpi`). The ISP's firewall gets confused and lets the traffic pass.
-*   **The Magic:** Your traffic goes *directly* to the destination. There is **no VPN, no middleman, and absolutely zero speed loss.** You get your raw, maximum internet speed. *(Note: This bypasses blocks, but does not hide your real IP).*
-
-### 2. 🌍 WARP Tunnel Mode (The Heavy Armor)
-*   **The Problem:** Some governments completely block the IP addresses of certain websites. Slicing the package label doesn't work if the destination address itself is banned.
-*   **The Freenet Solution:** Freenet automatically builds a secure, encrypted WireGuard tunnel using Cloudflare's massive global infrastructure (WARP). It routes your entire traffic through this indestructible "pipe".
-*   **The Magic:** Bypasses absolute IP bans, DNS poisoning, and hides your real IP address. It protects you on public Wi-Fi networks.
-
-### 3. 🛡️ sing-box Mode (Advanced Tunnel & TLS Fragmentation)
-*   **The Problem:** Sophisticated firewalls block connections using deep packet analysis and smart SNI detection, rendering basic packet-slicing or standard VPNs ineffective or easily blocked.
-*   **The Freenet Solution:** Freenet spins up a local `sing-box` engine (configured as a SOCKS5 proxy on port `1081`). It routes traffic directly but applies advanced **TLS Record Fragmentation** (`tls_record_fragment`) on port 443 and utilizes secure **DNS-over-HTTPS (DoH)** from Cloudflare.
-*   **The Magic:** Splitting the TLS handshake client hello records confuses advanced firewalls, allowing you to bypass restrictions without routing traffic through a third-party VPN server. Your DNS queries are encrypted via DoH to prevent poisoning.
+🇹🇷 **[Türkçe README](README.tr.md)** · 📋 **[Roadmap](ROADMAP.md)** · 🛡️ **[Threat Model](docs/THREAT_MODEL.md)** · 🔧 **[Build Guide](docs/BUILD.md)**
 
 ---
 
-## 🎩 The "Magic" Features
+## Three Intents (Honest Tradeoffs)
 
-Freenet isn't just another proxy app. It's designed to feel like a native Apple system service.
+Freenet does **not** promise "full speed + full anonymity" in a single switch. You pick an explicit **intent**:
 
-*   **⚡ Zero Friction Auto-Install:** Click "WARP Mode" for the first time? Freenet silently downloads the required packages (`wgcf`, `wireguard`), registers a free Cloudflare profile, and builds the tunnel. You don't ever need to touch the Terminal.
-*   **🔓 Passwordless 1-Click Toggle:** Changing proxy settings usually requires your Mac password every single time. Freenet asks for permission *once* during setup to securely whitelist its commands. From then on, toggling takes 1 second, password-free.
-*   **🧠 Self-Healing Autopilot:** Close your MacBook's lid or change Wi-Fi networks? VPNs usually drop and leave you disconnected. Freenet detects the drop instantly and **automatically restarts the tunnel** in the background. You're never left without internet.
-*   **📊 Live Matrix Dashboard:** Geeks will love the real-time, Matrix-style live log viewer that shows exactly how your packets are being fragmented.
+| Intent | Engines | What it protects | What it does **not** protect |
+|--------|---------|------------------|------------------------------|
+| **Hızlı** (Fast) | **sing-box** (`Hibrit Zırh`: sing-box + `ciadpi`, or pure TLS/TCP fragment) | Full ISP wire-speed DPI/SNI/HTTP-80 bypass + encrypted DoH DNS shield (malware/ad blocking) + QUIC/BTK sinkhole blocking | Does **not** hide your IP; not anonymous |
+| **Dengeli** (Balanced) | **WARP** (`sing-box` native WireGuard default, or full-device `wg-quick` L3 tunnel) | Masks IP, bypasses IP bans, routes DoH inside WARP, multi-IP/port failover (`500`/`4500`/`1701`/`2408`) + `MTU 1380` | **Not anonymous** — Cloudflare sees your real IP and destinations |
+| **Maks. Gizlilik** (Max Privacy) | **Tor** (+ optional `obfs4`/`snowflake` bridges) | Real multi-hop anonymity with live `check.torproject.org` verification | High speed; some sites block Tor exit nodes |
+
+> **Real anonymity is only Maks. Gizlilik (Tor).**  
+> WARP is free IP masking under a **single-operator trust model (Cloudflare)**, not anonymity.
 
 ---
 
-## 📦 One-Command Install
+## What's Inside (v1.2.0)
 
-To install Freenet, simply open your Terminal (`Applications > Utilities > Terminal`) and paste this single command:
+### Hardened Hızlı (VPN-Free, Wire-Speed)
+- **Hibrit Zırh (`sing-box 1081 → ciadpi 1082`)** *(default)*: Combines `sing-box` encrypted DoH, `HTTPS`/`SVCB` + QUIC/UDP:443 blocking, DNS `port 53` hijack, and BTK/sinkhole IP rejection (`195.175.254.2`, `0.0.0.0/8`) with `ciadpi`'s 3-tier automatic DPI desync (`-r 1+s`, `-s 1+s`, `-d 1`, HTTP:80 Host obfuscation `-M h`, `-L 3` auto-sorting, 1-hour IP cache).
+- **3 Anti-DPI modes in Settings:** `Hibrit Zırh`, `TLS Record (Hızlı)`, and `TCP Fragment (Sert DPI)`.
+- **5 Encrypted DoH DNS Shields with Auto-Failover:** Cloudflare Security (`1.1.1.2` malware block), AdGuard Shield (`94.140.14.14` ad+tracker+malware block), Cloudflare Fast (`1.1.1.1`), Quad9 (`9.9.9.9`), and Google (`8.8.8.8`), plus `4096` DNS cache and local `.local`/`.test`/LAN bypass.
+- **Mixed Proxy (`SOCKS5 + HTTP + HTTPS`):** Single localhost port (`127.0.0.1:1081`) with dynamic network interface discovery (`Wi-Fi`, `USB LAN`, `Ethernet`) and optional LAN bypass domains.
+
+### Upgraded Dengeli (Dual-Transport WARP)
+- **`sing-box WARP` *(default, recommended)*:** Native WireGuard inside bundled `sing-box` (`127.0.0.1:1083`) — no root, no `utun` route hijack (never breaks local dev servers or `cloudflared` tunnels), automatic sequential IP+port failover (`162.159.193.1` / `162.159.192.1` × `500`/`4500`/`1701`/`2408`) verified live with `warp=on`, plus DoH routed inside WARP.
+- **`Sistem Tüneli (wg-quick)`:** Optional full-device L3 `utun` tunnel automatically tuned with `MTU 1380`, `PersistentKeepalive 25`, alternate `162.159.193.1` endpoint, aligned DNS shield, and post-connect `warp=on` check.
+
+### Native macOS Engineering
+- **Universal Binary (`arm64` + `x86_64`)** compiled directly via `swiftc` + `lipo`.
+- **Zero-subprocess monitoring:** Native Darwin `getifaddrs()`, `CFNetworkCopySystemProxySettings()`, and non-blocking POSIX TCP `connect()` — eliminates background polling churn.
+- **Hot-Swap intents:** Switch between Hızlı / Dengeli / Maks. Gizlilik while connected without manual disconnect.
+- **Security & hygiene:** SHA-256 verification (`CHECKSUMS.sha256`), strict `DPIArgsValidator` flag allowlist + mandatory `127.0.0.1` localhost bind, narrow fixed-template sudoers, self-heal, and orphan proxy cleanup.
+
+---
+
+## Build & Run from Source
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Baro007/freenet/main/install.sh | bash
+git clone https://github.com/Baro007/freenet.git
+cd freenet/app
+./Tests/run_tests.sh   # 88 pure-logic tests against shipped sources
+./build.sh             # Builds Universal macOS app: build/freenet.app
+open build/freenet.app
 ```
 
-*This will automatically clone, build, and install the app to your `/Applications` folder.*
+**Requirements:** macOS 13+, Xcode Command Line Tools (`swiftc`).
 
-## 📱 Android Version (Beta)
+- **Hızlı (sing-box / ciadpi):** Works out of the box (binaries bundled & SHA-256 verified).
+- **Dengeli (WARP):** Uses `~/.config/wireguard/wgcf.conf` (auto-generates via `wgcf` if Homebrew `wgcf` is installed).
+- **Maks. Gizlilik (Tor):** Requires `tor` (Homebrew `brew install tor` or bundled under `app/Resources/bin/tor`). Freenet **never** fakes a connected Tor state.
 
-Freenet is now available on Android! It features a premium Jetpack Compose dark UI with live connection logs, integrated `sing-box` core (via `libbox-android`), and the same three bypass modes (DPI, WARP, and sing-box).
-
-### Features
-*   **Zero Configuration:** Install and connect.
-*   **Copy & Share Logs:** Built-in copyable log viewer with device and system information headers to easily copy or share diagnostics.
-*   **Optimized Binary Size:** Bundled and optimized for ARM64-v8a devices (~58 MB instead of 215 MB).
-
-### Build & Run
-To compile the APK yourself, you will need Java 17+ and the Android SDK:
-```bash
-cd android
-./gradlew assembleDebug
-```
-The output APK will be generated at `android/app/build/outputs/apk/debug/app-debug.apk`.
+See [docs/BUILD.md](docs/BUILD.md) and [install.sh](install.sh) for installation and checksum verification notes.
 
 ---
 
-## 🤝 Credits & Acknowledgements
-- [ciadpi (ByeDPI)](https://github.com/hufrea/byedpi) - The core DPI bypass engine.
-- [WireGuard](https://www.wireguard.com/) & [Cloudflare WARP](https://1.1.1.1/) - The tunnel infrastructure.
-- [GoodbyeDPI-Turkey](https://github.com/cagritaskn/GoodbyeDPI-Turkey) & [SplitWire-Turkey](https://github.com/a-mertdincer/SplitWire-Turkey-macOS) - Community inspirations.
+## Trust & Security
 
-## 📝 License
-MIT License. See [LICENSE](LICENSE) for details.
+- MIT open source — audit every line of Swift (`app/*.swift`).
+- No telemetry, no analytics, no accounts, no paid tiers.
+- System proxy (`networksetup`) is the current path; Network Extension roadmap is documented in [ROADMAP.md](ROADMAP.md) and [docs/NETWORK_EXTENSION.md](docs/NETWORK_EXTENSION.md).
+- Read [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) before relying on any mode for high-risk scenarios.
 
+---
+
+## Credits
+
+- [sing-box](https://github.com/SagerNet/sing-box) · [ciadpi / ByeDPI](https://github.com/hufrea/byedpi) · [WireGuard](https://www.wireguard.com/) · [Cloudflare WARP](https://1.1.1.1/) · [Tor Project](https://www.torproject.org/)
+- Community inspirations: GoodbyeDPI-Turkey, SplitWire-Turkey
+
+## License
+
+MIT — see [LICENSE](LICENSE).

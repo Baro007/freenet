@@ -1,203 +1,419 @@
 import Cocoa
 import SwiftUI
 
-// freenet — Hibrit DPI ve Tünel Yönetimi
-
-enum Mode: String {
-    case dpi = "DPI Modu (Yerel)"
-    case warp = "Tünel Modu (WARP)"
-    case singbox = "sing-box Modu"
-}
+// freenet — Intent-based hybrid censorship bypass + optional Tor anonymity
+// Visible via Dock + main window (not menubar-only).
 
 final class AppController: NSObject, NSApplicationDelegate {
-    private let tunnelName = "wgcf"
-    private let tunnelInternalIP = "172.16.0.2"
-    private let networksetupPath = "/usr/sbin/networksetup"
-    
-    private var wgQuickPath: String {
-        let fm = FileManager.default
-        if fm.fileExists(atPath: "/opt/homebrew/bin/wg-quick") { return "/opt/homebrew/bin/wg-quick" }
-        return "/usr/local/bin/wg-quick"
-    }
-    
-    private var brewPrefix: String {
-        let fm = FileManager.default
-        if fm.fileExists(atPath: "/opt/homebrew/bin/brew") { return "/opt/homebrew/bin" }
-        return "/usr/local/bin"
-    }
-    
-    private var statusItem: NSStatusItem!
+    private var statusItem: NSStatusItem?
     private var statusTimer: Timer?
     private var ipTimer: Timer?
-    
+
     private var isOn = false
     private var isTransitioning = false
-    private var currentMode: Mode = .dpi
+    private var isCheckingStatus = false
+    private var currentIntent: IntentMode = .fast
+    private var fastPreference: FastEnginePreference = .auto
     private var currentIPInfo = "Mevcut IP: Denetleniyor..."
-    
-    private var ciadpiProcess: Process?
-    private var singboxProcess: Process?
-    
+
+    private var mainWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var dashboardWindow: NSWindow?
     private var aboutWindow: NSWindow?
 
+    private var updateStatusLine = "Güncelleme: kontrol edilmedi"
+    private var updateAvailableURL: URL?
+    /// Live Tor / connection truth (not just "button ON")
+    private var torStatusLine = "Tor: kontrol edilmedi"
+    private var torReallyOn = false
+    private var directIPLine = "Gerçek IP: —"
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.imagePosition = .imageOnly
-        
-        let savedMode = UserDefaults.standard.string(forKey: "freenetMode") ?? Mode.dpi.rawValue
-        currentMode = Mode(rawValue: savedMode) ?? .dpi
-        
-        // Başlatmada kalan proxy'yi temizle (Force Quit koruması)
-        cleanupOrphanedProxy()
-        
+        let args = ProcessInfo.processInfo.arguments
+        let wantsConnect = args.contains("--connect") || args.contains("-c")
+        let wantsDisconnect = args.contains("--disconnect") || args.contains("-d")
+        let wantsToggle = args.contains("--toggle") || args.contains("-t")
+
+        // Single instance
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: "net.freenet.app")
+            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+        if let existing = others.first {
+            if wantsConnect {
+                DistributedNotificationCenter.default().postNotificationName(
+                    Notification.Name("net.freenet.connect"),
+                    object: nil,
+                    userInfo: nil,
+                    deliverImmediately: true
+                )
+                print("freenet: Bağlanma sinyali gönderildi.")
+            } else if wantsDisconnect {
+                DistributedNotificationCenter.default().postNotificationName(
+                    Notification.Name("net.freenet.disconnect"),
+                    object: nil,
+                    userInfo: nil,
+                    deliverImmediately: true
+                )
+                print("freenet: Bağlantıyı kesme sinyali gönderildi.")
+            } else if wantsToggle {
+                DistributedNotificationCenter.default().postNotificationName(
+                    Notification.Name("net.freenet.toggle"),
+                    object: nil,
+                    userInfo: nil,
+                    deliverImmediately: true
+                )
+                print("freenet: Durum değiştirme sinyali gönderildi.")
+            } else {
+                existing.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+                DistributedNotificationCenter.default().postNotificationName(
+                    Notification.Name("net.freenet.showMain"),
+                    object: nil,
+                    userInfo: nil,
+                    deliverImmediately: true
+                )
+            }
+            NSApp.terminate(nil)
+            return
+        }
+
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleShowMain),
+            name: Notification.Name("net.freenet.showMain"),
+            object: nil
+        )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleRemoteConnect),
+            name: Notification.Name("net.freenet.connect"),
+            object: nil
+        )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleRemoteDisconnect),
+            name: Notification.Name("net.freenet.disconnect"),
+            object: nil
+        )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleRemoteToggle),
+            name: Notification.Name("net.freenet.toggle"),
+            object: nil
+        )
+
+        // Classic menubar agent — this is what showed the shield at the start
+        NSApp.setActivationPolicy(.accessory)
+
+        setupStatusItem()
+
+        if let idx = args.firstIndex(of: "--intent"), idx + 1 < args.count {
+            currentIntent = IntentMode.fromStorage(args[idx + 1])
+            UserDefaults.standard.set(currentIntent.rawValue, forKey: "freenetIntent")
+        } else {
+            currentIntent = IntentMode.fromStorage(UserDefaults.standard.string(forKey: "freenetIntent"))
+        }
+
+        fastPreference = FastEnginePreference.fromStorage(
+            UserDefaults.standard.string(forKey: FastEnginePreference.storageKey)
+        )
+
+        EngineManager.shared.cleanupOrphanedProxy()
+        if EngineManager.shared.adoptRunningWarpIfPresent() {
+            isOn = true
+            currentIntent = .balanced
+            UserDefaults.standard.set(currentIntent.rawValue, forKey: "freenetIntent")
+        }
+
         updateIcon()
         rebuildMenu()
-        
-        statusTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             self?.refreshStatus()
         }
         refreshStatus()
-        
-        ipTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
-            self?.fetchIP()
+
+        ipTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { [weak self] _ in
+            self?.refreshConnectionTruth()
         }
-        fetchIP()
+        refreshConnectionTruth()
+
+        UpdateChecker.shared.check { [weak self] status in
+            self?.applyUpdateStatus(status, presentAlert: false)
+        }
+
+        LogManager.shared.appendLog("freenet \(AppVersion.display) — menü çubuğu kalkanı + accessory mode")
+
+        if wantsConnect || UserDefaults.standard.bool(forKey: "freenetAutoConnect") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                guard let self = self else { return }
+                if !self.isOn && !self.isTransitioning {
+                    LogManager.shared.appendLog("freenet: Otomatik bağlanma tetiklendi...")
+                    self.performToggle(forceReconnect: false)
+                }
+            }
+        }
+    }
+
+    @objc private func handleRemoteConnect() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if !self.isOn && !self.isTransitioning {
+                LogManager.shared.appendLog("freenet: Uzaktan BAĞLAN sinyali alındı.")
+                self.performToggle(forceReconnect: false)
+            }
+        }
+    }
+
+    @objc private func handleRemoteDisconnect() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if self.isOn && !self.isTransitioning {
+                LogManager.shared.appendLog("freenet: Uzaktan KES sinyali alındı.")
+                self.performToggle(forceReconnect: false)
+            }
+        }
+    }
+
+    @objc private func handleRemoteToggle() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if !self.isTransitioning {
+                LogManager.shared.appendLog("freenet: Uzaktan TOGGLE sinyali alındı.")
+                self.performToggle(forceReconnect: false)
+            }
+        }
+    }
+
+    @objc private func handleShowMain() {
+        showMainWindow()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showMainWindow()
+        return true
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         if isOn {
-            if currentMode == .dpi { stopDPI() }
-            else if currentMode == .warp { stopWARP() }
-            else { stopSingBox() }
+            EngineManager.shared.stop()
         }
     }
 
-    private func cleanupOrphanedProxy() {
-        let ciadpiRunning = (ciadpiProcess?.isRunning == true)
-        let singboxRunning = (singboxProcess?.isRunning == true)
-        if !ciadpiRunning && !singboxRunning && checkProxyOn() {
-            let interfaces = ["Wi-Fi", "Ethernet"]
-            for iface in interfaces {
-                _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxystate", iface, "off"])
-            }
+    // MARK: - Main window (always visible path)
+
+    @objc func showMainWindow() {
+        if mainWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 380, height: 610),
+                styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "freenet \(AppVersion.display)"
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.isReleasedWhenClosed = false
+            window.center()
+            window.setFrameAutosaveName("MainPanel")
+            mainWindow = window
         }
+        refreshMainWindowContent(force: true)
+        mainWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func fetchIP() {
-        guard let url = URL(string: "https://api.ipify.org") else { return }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 5.0
-        
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            DispatchQueue.main.async {
-                if let data = data, let ip = String(data: data, encoding: .utf8) {
-                    self.currentIPInfo = "Mevcut IP: \(ip)"
+    private func refreshMainWindowContent(force: Bool = false) {
+        guard let mainWindow = mainWindow else { return }
+        if !force && !mainWindow.isVisible { return }
+        let eng = EngineManager.shared.activeEngine?.displayName
+            ?? (isOn ? "?" : "—")
+        let view = MainPanelView(
+            version: AppVersion.fullLabel,
+            isOn: isOn,
+            isTransitioning: isTransitioning,
+            intent: currentIntent,
+            engineName: eng,
+            ipInfo: currentIPInfo,
+            torStatus: torStatusLine,
+            torReallyOn: torReallyOn,
+            directIP: directIPLine,
+            updateLine: updateStatusLine,
+            onToggle: { [weak self] in self?.toggleTunnel() },
+            onSelectIntent: { [weak self] mode in
+                guard let self = self, !self.isTransitioning else { return }
+                if self.currentIntent == mode { return }
+                self.currentIntent = mode
+                UserDefaults.standard.set(mode.rawValue, forKey: "freenetIntent")
+                if self.isOn {
+                    self.performToggle(forceReconnect: true)
                 } else {
-                    self.currentIPInfo = "Mevcut IP: Bulunamadı"
+                    self.rebuildMenu()
+                    self.refreshMainWindowContent()
+                }
+            },
+            onOpenDashboard: { [weak self] in self?.showDashboard() },
+            onOpenSettings: { [weak self] in self?.showSettings() },
+            onCheckUpdates: { [weak self] in self?.checkForUpdates() },
+            onInstallSudoers: { [weak self] in self?.installSudoers() },
+            onRecheckTor: { [weak self] in self?.refreshConnectionTruth() },
+            onQuit: { [weak self] in self?.quitApp() }
+        )
+        mainWindow.contentView = NSHostingView(rootView: view)
+        mainWindow.title = "freenet \(AppVersion.display)" + (isOn ? " · AÇIK" : "")
+    }
+
+    // MARK: - Status item (classic shield — same style that worked at first launch)
+
+    private func setupStatusItem() {
+        // Remove previous if recreating
+        if let old = statusItem {
+            NSStatusBar.system.removeStatusItem(old)
+            statusItem = nil
+        }
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = item
+        guard let button = item.button else {
+            LogManager.shared.appendLog("❌ statusItem.button nil")
+            return
+        }
+        button.imagePosition = .imageOnly
+        button.toolTip = "freenet \(AppVersion.display)"
+        // Menu only (assigned in rebuildMenu) — matches original working app
+        LogManager.shared.appendLog("Menü çubuğu kalkanı eklendi")
+    }
+
+    /// Refresh real IP vs visible (proxied/WARP/Tor) IP truth.
+    private func refreshConnectionTruth() {
+        let currentlyOn = isOn
+        let currentMode = currentIntent
+        let activeProxy = EngineManager.shared.activeEngine?.socksProxy
+        
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            let direct = ConnectionProbe.checkDirectIP()
+            let portOpen = ConnectionProbe.isLocalPortOpen(TorEngine.socksPort)
+            let socksOn = ProxyService.shared.isSOCKSEnabled()
+
+            var torLine = "Tor: kapalı"
+            var torOK = false
+            var apparent = "—"
+
+            if currentlyOn && currentMode == .maxPrivacy {
+                if !portOpen {
+                    torLine = "Tor: process/port 9050 YOK (yalnızca UI AÇIK olabilir)"
+                } else {
+                    let check = ConnectionProbe.checkTorSOCKS(port: TorEngine.socksPort)
+                    torOK = check.isTor
+                    torLine = check.detail
+                    if let exit = check.exitIP { apparent = exit }
+                }
+            } else if currentlyOn && currentMode == .balanced {
+                let warp = ConnectionProbe.checkWarpTrace(socksProxy: activeProxy)
+                if warp.isWarp {
+                    if let wip = warp.ip { apparent = wip }
+                    else if let p = activeProxy, let pip = ConnectionProbe.checkProxiedIP(host: p.host, port: p.port) { apparent = pip }
+                    else if let d = direct { apparent = d }
+                    let colo = warp.colo.map { " (\($0))" } ?? ""
+                    torLine = "WARP DOĞRULANDI\(colo) · IP maskeli (anonimlik değil)"
+                } else {
+                    if let p = activeProxy, let pip = ConnectionProbe.checkProxiedIP(host: p.host, port: p.port) {
+                        apparent = pip
+                    } else if let d = direct {
+                        apparent = d
+                    }
+                    torLine = "WARP: doğrulama bekleniyor…"
+                }
+            } else if currentlyOn {
+                // Fast mode: IP remains visible (direct ISP speed)
+                if let p = activeProxy, let pip = ConnectionProbe.checkProxiedIP(host: p.host, port: p.port) {
+                    apparent = pip
+                } else if let d = direct {
+                    apparent = d
+                }
+                torLine = "Hızlı: DPI + DoH aktif · IP görünür"
+            } else {
+                if let d = direct { apparent = d }
+                torLine = "Tor: freenet kapalı"
+            }
+
+            let directText = direct.map { "Gerçek (proxy’siz) IP: \($0)" } ?? "Gerçek IP: alınamadı"
+            let socksText = socksOn ? "Sistem SOCKS: AÇIK" : "Sistem SOCKS: kapalı"
+
+            DispatchQueue.main.async {
+                self.torReallyOn = torOK
+                self.torStatusLine = torLine
+                self.directIPLine = directText
+                self.currentIPInfo = "Görünen IP: \(apparent) · \(socksText)"
+                if currentlyOn && currentMode == .maxPrivacy {
+                    LogManager.shared.appendLog(torOK ? "✅ \(torLine)" : "⚠️ \(torLine)")
                 }
                 self.rebuildMenu()
+                self.refreshMainWindowContent()
             }
         }
-        task.resume()
-    }
-
-    private func isSudoersInstalled() -> Bool {
-        let task = createProcess("/usr/bin/sudo", args: ["-n", "/usr/bin/true"])
-        task.standardOutput = Pipe()
-        task.standardError = Pipe()
-        do {
-            try task.run()
-            task.waitUntilExit()
-            return task.terminationStatus == 0
-        } catch {
-            return false
-        }
-    }
-
-    @objc private func installSudoers() {
-        let user = NSUserName()
-        let rules = [
-            "\(user) ALL=(ALL) NOPASSWD: \(networksetupPath) -setsocksfirewallproxy *",
-            "\(user) ALL=(ALL) NOPASSWD: \(networksetupPath) -setsocksfirewallproxystate *",
-            "\(user) ALL=(ALL) NOPASSWD: \(wgQuickPath) up wgcf",
-            "\(user) ALL=(ALL) NOPASSWD: \(wgQuickPath) down wgcf",
-            "\(user) ALL=(ALL) NOPASSWD: /usr/bin/true"
-        ]
-        let content = rules.joined(separator: "\n")
-        let script = """
-        echo '\(content)' > /tmp/freenet_sudoers
-        chmod 440 /tmp/freenet_sudoers
-        chown root:wheel /tmp/freenet_sudoers
-        mv /tmp/freenet_sudoers /etc/sudoers.d/freenet
-        """
-        let escaped = script.replacingOccurrences(of: "\"", with: "\\\"")
-        let source = "do shell script \"\(escaped)\" with administrator privileges"
-        var err: NSDictionary?
-        NSAppleScript(source: source)?.executeAndReturnError(&err)
-        if err == nil {
-            showInfo(detail: "Şifresiz geçiş başarıyla aktif edildi!")
-            rebuildMenu()
-        } else {
-            showError(detail: "Şifresiz geçiş kurulamadı.")
-        }
-    }
-
-    private func runSudoCommand(_ cmd: String, args: [String]) -> Bool {
-        if isSudoersInstalled() {
-            let task = createProcess("/usr/bin/sudo", args: [cmd] + args)
-            try? task.run()
-            task.waitUntilExit()
-            return task.terminationStatus == 0
-        } else {
-            let fullCmd = "\(cmd) " + args.joined(separator: " ")
-            let escaped = fullCmd.replacingOccurrences(of: "\"", with: "\\\"")
-            let script = "do shell script \"export PATH=\\\"/opt/homebrew/bin:/usr/local/bin:\\$PATH\\\"; \(escaped)\" with administrator privileges"
-            var err: NSDictionary?
-            NSAppleScript(source: script)?.executeAndReturnError(&err)
-            return err == nil
-        }
-    }
-
-    private func createProcess(_ cmd: String, args: [String]) -> Process {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: cmd)
-        task.arguments = args
-        
-        var env = ProcessInfo.processInfo.environment
-        let homebrewPath = "/opt/homebrew/bin:/usr/local/bin"
-        if let currentPath = env["PATH"] {
-            env["PATH"] = "\(homebrewPath):\(currentPath)"
-        } else {
-            env["PATH"] = homebrewPath
-        }
-        task.environment = env
-        return task
     }
 
     private func updateIcon() {
-        guard let button = statusItem.button else { return }
+        guard let button = statusItem?.button else { return }
         let symbol: String
         if isTransitioning {
             symbol = "shield.lefthalf.filled.trianglebadge.exclamationmark"
         } else if isOn {
-            symbol = "shield.lefthalf.filled"
+            // Green sense via filled shield when Tor proven or simply on
+            symbol = torReallyOn || isOn ? "shield.lefthalf.filled" : "shield.slash"
         } else {
             symbol = "shield.slash"
         }
         let img = NSImage(systemSymbolName: symbol, accessibilityDescription: "freenet")
         img?.isTemplate = true
         button.image = img
-        button.toolTip = isOn ? "freenet AÇIK" : "freenet kapalı"
+        button.imagePosition = .imageOnly
+        button.title = ""
+        var tip = isOn ? "freenet AÇIK · \(currentIntent.rawValue)" : "freenet kapalı"
+        if currentIntent == .maxPrivacy && isOn {
+            tip += torReallyOn ? " · Tor DOĞRULANDI" : " · Tor henüz doğrulanmadı"
+        }
+        button.toolTip = tip
     }
 
     private func rebuildMenu() {
         let menu = NSMenu()
-        
+
+        let verItem = NSMenuItem(title: "freenet \(AppVersion.display)", action: nil, keyEquivalent: "")
+        verItem.isEnabled = false
+        menu.addItem(verItem)
+
+        let openMain = NSMenuItem(title: "Kontrol Paneli…", action: #selector(showMainWindow), keyEquivalent: "m")
+        openMain.target = self
+        menu.addItem(openMain)
+
+        let hint = NSMenuItem(
+            title: "İkon yoksa: Control Center › Menü Çubuğu veya «« taşma",
+            action: nil,
+            keyEquivalent: ""
+        )
+        hint.isEnabled = false
+        menu.addItem(hint)
+
         let ipItem = NSMenuItem(title: currentIPInfo, action: nil, keyEquivalent: "")
         ipItem.isEnabled = false
         menu.addItem(ipItem)
+
+        let directItem = NSMenuItem(title: directIPLine, action: nil, keyEquivalent: "")
+        directItem.isEnabled = false
+        menu.addItem(directItem)
+
+        let torItem = NSMenuItem(title: torStatusLine, action: nil, keyEquivalent: "")
+        torItem.isEnabled = false
+        menu.addItem(torItem)
+
+        let recheck = NSMenuItem(title: "Tor / IP Doğrula…", action: #selector(manualRecheck), keyEquivalent: "r")
+        recheck.target = self
+        menu.addItem(recheck)
+
+        let updItem = NSMenuItem(title: updateStatusLine, action: nil, keyEquivalent: "")
+        updItem.isEnabled = false
+        menu.addItem(updItem)
         menu.addItem(NSMenuItem.separator())
 
         let stateText = isTransitioning ? "Geçiş yapılıyor…" : (isOn ? "● freenet AÇIK" : "○ freenet kapalı")
@@ -206,9 +422,19 @@ final class AppController: NSObject, NSApplicationDelegate {
         menu.addItem(header)
 
         if isOn {
-            let info = NSMenuItem(title: currentMode.rawValue, action: nil, keyEquivalent: "")
+            let engName = EngineManager.shared.activeEngine.map { $0.displayName } ?? "?"
+            let info = NSMenuItem(title: "\(currentIntent.rawValue) · \(engName)", action: nil, keyEquivalent: "")
             info.isEnabled = false
             menu.addItem(info)
+            if currentIntent == .maxPrivacy {
+                let t = NSMenuItem(
+                    title: torReallyOn ? "✅ Tor ağı GERÇEKTEN aktif" : "⚠️ Tor henüz kanıtlanmadı",
+                    action: nil,
+                    keyEquivalent: ""
+                )
+                t.isEnabled = false
+                menu.addItem(t)
+            }
         }
 
         menu.addItem(NSMenuItem.separator())
@@ -223,46 +449,59 @@ final class AppController: NSObject, NSApplicationDelegate {
         menu.addItem(toggle)
 
         menu.addItem(NSMenuItem.separator())
-        
-        let modeSubmenu = NSMenu()
-        let dpiItem = NSMenuItem(title: Mode.dpi.rawValue, action: #selector(selectDPIMode), keyEquivalent: "")
-        dpiItem.target = self
-        dpiItem.state = (currentMode == .dpi) ? .on : .off
-        modeSubmenu.addItem(dpiItem)
-        
-        let warpItem = NSMenuItem(title: Mode.warp.rawValue, action: #selector(selectWARPMode), keyEquivalent: "")
-        warpItem.target = self
-        warpItem.state = (currentMode == .warp) ? .on : .off
-        modeSubmenu.addItem(warpItem)
 
-        let singboxItem = NSMenuItem(title: Mode.singbox.rawValue, action: #selector(selectSingBoxMode), keyEquivalent: "")
-        singboxItem.target = self
-        singboxItem.state = (currentMode == .singbox) ? .on : .off
-        modeSubmenu.addItem(singboxItem)
-        
-        let modeMenuItem = NSMenuItem(title: "Bağlantı Modu", action: nil, keyEquivalent: "")
-        modeMenuItem.submenu = modeSubmenu
-        modeMenuItem.isEnabled = !isOn && !isTransitioning
-        menu.addItem(modeMenuItem)
-        
-        if !isSudoersInstalled() {
+        let intentSub = NSMenu()
+        for intent in IntentMode.allCases {
+            let item = NSMenuItem(
+                title: "\(intent.rawValue) — \(intent.detail)",
+                action: #selector(selectIntent(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = intent.rawValue
+            item.state = (currentIntent == intent) ? .on : .off
+            intentSub.addItem(item)
+        }
+        let intentMenu = NSMenuItem(title: "Niyet (Mod)", action: nil, keyEquivalent: "")
+        intentMenu.submenu = intentSub
+        intentMenu.isEnabled = !isTransitioning
+        menu.addItem(intentMenu)
+
+        if !ProxyService.shared.isSudoersInstalled() {
             menu.addItem(NSMenuItem.separator())
-            let sudoItem = NSMenuItem(title: "Şifresiz Geçişi Aktif Et ⚡️", action: #selector(installSudoers), keyEquivalent: "")
+            let sudoItem = NSMenuItem(
+                title: "Şifresiz Geçişi Aktif Et ⚡️",
+                action: #selector(installSudoers),
+                keyEquivalent: ""
+            )
+            sudoItem.target = self
+            menu.addItem(sudoItem)
+        } else if !ProxyService.shared.hasExtendedProxySudoers() {
+            menu.addItem(NSMenuItem.separator())
+            let sudoItem = NSMenuItem(
+                title: "Tam Proxy Yetkisini Güncelle (HTTP+HTTPS+Bypass) ⚡️",
+                action: #selector(installSudoers),
+                keyEquivalent: ""
+            )
             sudoItem.target = self
             menu.addItem(sudoItem)
         }
 
         menu.addItem(NSMenuItem.separator())
-        
+
         let dashboardItem = NSMenuItem(title: "Canlı Dashboard...", action: #selector(showDashboard), keyEquivalent: "d")
         dashboardItem.target = self
         menu.addItem(dashboardItem)
-        
+
         let settingsItem = NSMenuItem(title: "Ayarlar...", action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
 
         menu.addItem(NSMenuItem.separator())
+
+        let checkUpd = NSMenuItem(title: "Güncellemeleri Kontrol Et…", action: #selector(checkForUpdates), keyEquivalent: "u")
+        checkUpd.target = self
+        menu.addItem(checkUpd)
 
         let about = NSMenuItem(title: "Hakkında…", action: #selector(showAbout), keyEquivalent: "")
         about.target = self
@@ -272,70 +511,169 @@ final class AppController: NSObject, NSApplicationDelegate {
         quit.target = self
         menu.addItem(quit)
 
-        statusItem.menu = menu
+        statusItem?.menu = menu
     }
-    
-    @objc private func selectDPIMode() {
-        currentMode = .dpi
-        UserDefaults.standard.set(currentMode.rawValue, forKey: "freenetMode")
+
+    @objc private func checkForUpdates() {
+        updateStatusLine = "Güncelleme: kontrol ediliyor…"
         rebuildMenu()
+        refreshMainWindowContent()
+        UpdateChecker.shared.check { [weak self] status in
+            self?.applyUpdateStatus(status, presentAlert: true)
+        }
     }
-    
-    @objc private func selectWARPMode() {
-        currentMode = .warp
-        UserDefaults.standard.set(currentMode.rawValue, forKey: "freenetMode")
+
+    @objc private func manualRecheck() {
+        torStatusLine = "Tor: kontrol ediliyor…"
         rebuildMenu()
+        refreshMainWindowContent()
+        refreshConnectionTruth()
     }
-    
-    @objc private func selectSingBoxMode() {
-        currentMode = .singbox
-        UserDefaults.standard.set(currentMode.rawValue, forKey: "freenetMode")
+
+    private func applyUpdateStatus(_ status: UpdateChecker.Status, presentAlert: Bool) {
+        switch status {
+        case .checking:
+            updateStatusLine = "Güncelleme: kontrol ediliyor…"
+            updateAvailableURL = nil
+        case .upToDate(let current):
+            updateStatusLine = "Güncel · v\(current)"
+            updateAvailableURL = nil
+        case .updateAvailable(_, let latest, _, let pageURL):
+            updateStatusLine = "⬆ Yeni sürüm: v\(latest)"
+            updateAvailableURL = pageURL
+        case .failed:
+            updateStatusLine = "Güncelleme: kontrol edilemedi"
+            updateAvailableURL = nil
+        }
         rebuildMenu()
+        refreshMainWindowContent()
+        if presentAlert {
+            UpdateChecker.shared.presentAlert(for: status)
+        }
+    }
+
+    @objc private func selectIntent(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let intent = IntentMode(rawValue: raw) else { return }
+        guard currentIntent != intent else { return }
+        currentIntent = intent
+        UserDefaults.standard.set(intent.rawValue, forKey: "freenetIntent")
+        if isOn && !isTransitioning {
+            performToggle(forceReconnect: true)
+        } else {
+            rebuildMenu()
+            refreshMainWindowContent()
+        }
+    }
+
+    @objc private func installSudoers() {
+        if ProxyService.shared.installSudoers() {
+            showInfo(detail: "Şifresiz geçiş başarıyla aktif edildi!")
+            rebuildMenu()
+        } else {
+            showError(detail: "Şifresiz geçiş kurulamadı.")
+        }
     }
 
     @objc private func toggleTunnel() {
+        performToggle(forceReconnect: false)
+    }
+
+    private func performToggle(forceReconnect: Bool) {
         guard !isTransitioning else { return }
         isTransitioning = true
         updateIcon()
         rebuildMenu()
+        refreshMainWindowContent()
+
+        let intent = currentIntent
+        let pref = FastEnginePreference.fromStorage(
+            UserDefaults.standard.string(forKey: FastEnginePreference.storageKey)
+        )
+        fastPreference = pref
+        
+        let currentlyOn = isOn
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            
-            if self.isOn {
-                if self.currentMode == .dpi {
-                    self.stopDPI()
-                } else if self.currentMode == .warp {
-                    self.stopWARP()
-                } else {
-                    self.stopSingBox()
+            if currentlyOn && !forceReconnect {
+                EngineManager.shared.stop()
+                DispatchQueue.main.async {
+                    self.isOn = false
+                    self.isTransitioning = false
+                    self.updateIcon()
+                    self.rebuildMenu()
+                    self.refreshMainWindowContent()
+                    self.refreshConnectionTruth()
                 }
             } else {
-                if self.currentMode == .dpi {
-                    self.startDPI()
-                } else if self.currentMode == .warp {
-                    self.startWARP()
-                } else {
-                    self.startSingBox()
+                do {
+                    try EngineManager.shared.start(intent: intent, fastPreference: pref)
+                    DispatchQueue.main.async {
+                        self.isOn = EngineManager.shared.isConnected || ProxyService.shared.isSOCKSEnabled()
+                        self.isTransitioning = false
+                        if !self.isOn {
+                            self.showError(detail: EngineManager.shared.lastError ?? "Bağlantı kurulamadı")
+                        } else {
+                            let eng = EngineManager.shared.activeEngine?.displayName ?? "?"
+                            LogManager.shared.appendLog("✅ Bağlandı: \(intent.rawValue) / \(eng)")
+                        }
+                        self.updateIcon()
+                        self.rebuildMenu()
+                        self.refreshMainWindowContent()
+                        self.refreshConnectionTruth()
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        self.isOn = false
+                        self.isTransitioning = false
+                        self.showError(detail: error.localizedDescription)
+                        self.updateIcon()
+                        self.rebuildMenu()
+                        self.refreshMainWindowContent()
+                        self.refreshConnectionTruth()
+                    }
                 }
-            }
-            
-            DispatchQueue.main.async {
-                self.isOn = self.checkTunnelUp()
-                self.isTransitioning = false
-                self.updateIcon()
-                self.rebuildMenu()
-                self.fetchIP()
             }
         }
     }
-    
+
+    private func refreshStatus() {
+        guard !isTransitioning, !isCheckingStatus, isOn else { return }
+        isCheckingStatus = true
+        let intent = currentIntent
+        let pref = FastEnginePreference.fromStorage(
+            UserDefaults.standard.string(forKey: FastEnginePreference.storageKey)
+        )
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            let healed = EngineManager.shared.healIfNeeded(
+                expectedOn: true,
+                intent: intent,
+                fastPreference: pref
+            )
+            let nowOn = EngineManager.shared.isConnected || ProxyService.shared.isSOCKSEnabled()
+            DispatchQueue.main.async {
+                self.isCheckingStatus = false
+                guard !self.isTransitioning else { return }
+                if healed || nowOn != self.isOn {
+                    self.isOn = nowOn
+                    self.updateIcon()
+                    self.rebuildMenu()
+                    self.refreshMainWindowContent()
+                    self.refreshConnectionTruth()
+                }
+            }
+        }
+    }
+
     @objc private func showSettings() {
         if settingsWindow == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 440, height: 280),
+                contentRect: NSRect(x: 0, y: 0, width: 460, height: 540),
                 styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
-                backing: .buffered, defer: false)
+                backing: .buffered, defer: false
+            )
             window.title = "Freenet Ayarları"
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
@@ -352,369 +690,52 @@ final class AppController: NSObject, NSApplicationDelegate {
     @objc private func showDashboard() {
         if dashboardWindow == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 580, height: 420),
+                contentRect: NSRect(x: 0, y: 0, width: 600, height: 460),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-                backing: .buffered, defer: false)
+                backing: .buffered, defer: false
+            )
             window.title = "Freenet Canlı Dashboard"
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.center()
             window.setFrameAutosaveName("DashboardWindow")
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: DashboardView())
+            window.contentView = NSHostingView(rootView: DashboardView(
+                intentProvider: { [weak self] in self?.currentIntent.rawValue ?? "—" },
+                engineProvider: {
+                    EngineManager.shared.activeEngine?.displayName
+                        ?? (EngineManager.shared.isConnected ? "?" : "—")
+                },
+                isOnProvider: { [weak self] in self?.isOn ?? false }
+            ))
             dashboardWindow = window
         }
         NSApp.activate(ignoringOtherApps: true)
         dashboardWindow?.makeKeyAndOrderFront(nil)
     }
-    
-    private func startDPI() {
-        let ciadpiPath = Bundle.main.bundlePath + "/Contents/Resources/bin/ciadpi"
-        let chmodTask = createProcess("/bin/chmod", args: ["+x", ciadpiPath])
-        try? chmodTask.run()
-        chmodTask.waitUntilExit()
-        
-        let dpiArgsStr = UserDefaults.standard.string(forKey: "dpiArgs") ?? "-d 1 -p 1080"
-        let args = dpiArgsStr.components(separatedBy: " ").filter { !$0.isEmpty }
-        ciadpiProcess = createProcess(ciadpiPath, args: args)
-        
-        // Port'u argümanlardan parse et (varsayılan: 1080)
-        var proxyPort = "1080"
-        if let pIdx = args.firstIndex(of: "-p"), pIdx + 1 < args.count {
-            proxyPort = args[pIdx + 1]
+
+    @objc private func showAbout() {
+        if aboutWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 480, height: 640),
+                styleMask: [.titled, .closable, .fullSizeContentView],
+                backing: .buffered, defer: false
+            )
+            window.center()
+            window.title = "Freenet Hakkında"
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.contentView = NSHostingView(rootView: AboutView())
+            window.isReleasedWhenClosed = false
+            aboutWindow = window
         }
-        
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        ciadpiProcess?.standardOutput = outPipe
-        ciadpiProcess?.standardError = errPipe
-        
-        let logHandler: (FileHandle) -> Void = { fileHandle in
-            let data = fileHandle.availableData
-            if data.isEmpty { return }
-            if let string = String(data: data, encoding: .utf8) {
-                let lines = string.components(separatedBy: .newlines)
-                for line in lines where !line.isEmpty {
-                    LogManager.shared.appendLog(line)
-                }
-            }
-        }
-        outPipe.fileHandleForReading.readabilityHandler = logHandler
-        errPipe.fileHandleForReading.readabilityHandler = logHandler
-        
-        LogManager.shared.appendLog("--- ciadpi başlatılıyor (\(dpiArgsStr)) ---")
-        do {
-            try ciadpiProcess?.run()
-        } catch {
-            showError(detail: "DPI motoru başlatılamadı: \(error.localizedDescription)")
-            return
-        }
-        
-        let primaryInterfaces = ["Wi-Fi", "Ethernet"]
-        for interface in primaryInterfaces {
-            _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxy", interface, "127.0.0.1", proxyPort])
-            _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxystate", interface, "on"])
-        }
-    }
-    
-    private func stopDPI() {
-        (ciadpiProcess?.standardOutput as? Pipe)?.fileHandleForReading.readabilityHandler = nil
-        (ciadpiProcess?.standardError as? Pipe)?.fileHandleForReading.readabilityHandler = nil
-        ciadpiProcess?.terminate()
-        ciadpiProcess = nil
-        LogManager.shared.appendLog("--- ciadpi durduruldu ---")
-        
-        // Ensure proxy is killed
-        let killTask = createProcess("/usr/bin/killall", args: ["-9", "ciadpi"])
-        try? killTask.run()
-        
-        let primaryInterfaces = ["Wi-Fi", "Ethernet"]
-        for interface in primaryInterfaces {
-            _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxystate", interface, "off"])
-        }
+        aboutWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func startSingBox() {
-        let singboxPath = Bundle.main.bundlePath + "/Contents/Resources/bin/sing-box"
-        let chmodTask = createProcess("/bin/chmod", args: ["+x", singboxPath])
-        try? chmodTask.run()
-        chmodTask.waitUntilExit()
-        
-        let configDir = NSString(string: "~/.config/freenet").expandingTildeInPath
-        let configPath = configDir + "/sing-box.json"
-        
-        try? FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true, attributes: nil)
-        
-        let configJson = """
-        {
-          "log": {
-            "level": "info",
-            "timestamp": true
-          },
-          "inbounds": [
-            {
-              "type": "socks",
-              "tag": "socks-in",
-              "listen": "127.0.0.1",
-              "listen_port": 1081
-            }
-          ],
-          "outbounds": [
-            {
-              "type": "direct",
-              "tag": "direct-out"
-            }
-          ],
-          "route": {
-            "rules": [
-              {
-                "inbound": ["socks-in"],
-                "action": "sniff"
-              },
-              {
-                "port": 443,
-                "action": "route-options",
-                "tls_record_fragment": true
-              }
-            ]
-          },
-          "dns": {
-            "servers": [
-              {
-                "tag": "cloudflare-doh",
-                "type": "https",
-                "server": "1.1.1.1",
-                "server_port": 443,
-                "path": "/dns-query"
-              }
-            ],
-            "strategy": "ipv4_only"
-          }
-        }
-        """
-        
-        try? configJson.write(toFile: configPath, atomically: true, encoding: .utf8)
-        
-        singboxProcess = createProcess(singboxPath, args: ["run", "-c", configPath])
-        
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        singboxProcess?.standardOutput = outPipe
-        singboxProcess?.standardError = errPipe
-        
-        let logHandler: (FileHandle) -> Void = { fileHandle in
-            let data = fileHandle.availableData
-            if data.isEmpty { return }
-            if let string = String(data: data, encoding: .utf8) {
-                let lines = string.components(separatedBy: .newlines)
-                for line in lines where !line.isEmpty {
-                    LogManager.shared.appendLog(line)
-                }
-            }
-        }
-        outPipe.fileHandleForReading.readabilityHandler = logHandler
-        errPipe.fileHandleForReading.readabilityHandler = logHandler
-        
-        LogManager.shared.appendLog("--- sing-box başlatılıyor (SOCKS5 Port: 1081, DoH, Fragment) ---")
-        do {
-            try singboxProcess?.run()
-        } catch {
-            showError(detail: "sing-box başlatılamadı: \(error.localizedDescription)")
-            return
-        }
-        
-        let primaryInterfaces = ["Wi-Fi", "Ethernet"]
-        for interface in primaryInterfaces {
-            _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxy", interface, "127.0.0.1", "1081"])
-            _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxystate", interface, "on"])
-        }
-    }
-    
-    private func stopSingBox() {
-        (singboxProcess?.standardOutput as? Pipe)?.fileHandleForReading.readabilityHandler = nil
-        (singboxProcess?.standardError as? Pipe)?.fileHandleForReading.readabilityHandler = nil
-        singboxProcess?.terminate()
-        singboxProcess = nil
-        LogManager.shared.appendLog("--- sing-box durduruldu ---")
-        
-        let killTask = createProcess("/usr/bin/killall", args: ["-9", "sing-box"])
-        try? killTask.run()
-        
-        let primaryInterfaces = ["Wi-Fi", "Ethernet"]
-        for interface in primaryInterfaces {
-            _ = runSudoCommand(networksetupPath, args: ["-setsocksfirewallproxystate", interface, "off"])
-        }
-    }
-    
-    private func ensureWARPSetup() -> Bool {
-        let fm = FileManager.default
-        let brewPath = brewPrefix + "/brew"
-        let wgcfPath = brewPrefix + "/wgcf"
-        let wgQuick = brewPrefix + "/wg-quick"
-        
-        if !fm.fileExists(atPath: wgcfPath) || !fm.fileExists(atPath: wgQuick) {
-            DispatchQueue.main.sync {
-                showInfo(detail: "Tünel modu için gerekli paketler (wireguard-tools, wgcf) indiriliyor. Bu işlem birkaç dakika sürebilir, lütfen bekleyin...")
-            }
-            
-            if !fm.fileExists(atPath: brewPath) {
-                DispatchQueue.main.sync {
-                    showInfo(detail: "Homebrew bulunamadı. Kurulum komutu Terminal'de otomatik açılacaktır. Lütfen Terminal'deki talimatları izleyip kurulum bittiğinde freenet'i tekrar çalıştırın.")
-                }
-                let script = "tell application \"Terminal\" to do script \"/bin/bash -c \\\"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\\\"\""
-                var err: NSDictionary?
-                NSAppleScript(source: script)?.executeAndReturnError(&err)
-                return false
-            }
-            
-            let task = createProcess(brewPath, args: ["install", "wireguard-tools", "wgcf"])
-            try? task.run()
-            task.waitUntilExit()
-            
-            if task.terminationStatus != 0 {
-                DispatchQueue.main.sync {
-                    showError(detail: "Bağımlılıklar yüklenemedi. Lütfen Terminal'te manuel olarak çalıştırın: brew install wireguard-tools wgcf")
-                }
-                return false
-            }
-        }
-        
-        let configDir = NSString(string: "~/.config/wireguard").expandingTildeInPath
-        let configPath = configDir + "/wgcf.conf"
-        
-        if !fm.fileExists(atPath: configPath) {
-            DispatchQueue.main.sync {
-                showInfo(detail: "WARP profiliniz oluşturuluyor. Bu işlem bir kereye mahsustur, lütfen bekleyin...")
-            }
-            
-            try? fm.createDirectory(atPath: configDir, withIntermediateDirectories: true, attributes: nil)
-            
-            let regTask = createProcess(wgcfPath, args: ["register", "--accept-tos"])
-            regTask.currentDirectoryURL = URL(fileURLWithPath: configDir)
-            try? regTask.run()
-            regTask.waitUntilExit()
-            
-            let genTask = createProcess(wgcfPath, args: ["generate"])
-            genTask.currentDirectoryURL = URL(fileURLWithPath: configDir)
-            try? genTask.run()
-            genTask.waitUntilExit()
-            
-            if !fm.fileExists(atPath: configPath) {
-                DispatchQueue.main.sync {
-                    showError(detail: "WARP profili oluşturulamadı.")
-                }
-                return false
-            }
-        }
-        
-        let destConfig = "/etc/wireguard/wgcf.conf"
-        if !fm.fileExists(atPath: destConfig) {
-            let cpCmd = "/bin/mkdir -p /etc/wireguard && /bin/cp '\(configPath)' '\(destConfig)' && /bin/chmod 600 '\(destConfig)'"
-            let script = "do shell script \"\(cpCmd)\" with administrator privileges"
-            var err: NSDictionary?
-            NSAppleScript(source: script)?.executeAndReturnError(&err)
-        }
-        
-        return true
-    }
-
-    private func startWARP() {
-        if !ensureWARPSetup() {
-            return
-        }
-        
-        let script = "do shell script \"export PATH=\\\"/opt/homebrew/bin:/usr/local/bin:\\$PATH\\\"; \(wgQuickPath) up \(tunnelName)\" with administrator privileges"
-        
-        if isSudoersInstalled() {
-            _ = runSudoCommand(wgQuickPath, args: ["up", tunnelName])
-        } else {
-            var err: NSDictionary?
-            NSAppleScript(source: script)?.executeAndReturnError(&err)
-        }
-    }
-    
-    private func stopWARP() {
-        if isSudoersInstalled() {
-            _ = runSudoCommand(wgQuickPath, args: ["down", tunnelName])
-        } else {
-            let cmd = "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; \(wgQuickPath) down \(tunnelName)"
-            let escaped = cmd.replacingOccurrences(of: "\"", with: "\\\"")
-            let script = "do shell script \"\(escaped)\" with administrator privileges"
-            var err: NSDictionary?
-            NSAppleScript(source: script)?.executeAndReturnError(&err)
-        }
-    }
-
-    private func checkTunnelUp() -> Bool {
-        if currentMode == .warp {
-            let task = createProcess("/sbin/ifconfig", args: [])
-            let pipe = Pipe()
-            task.standardOutput = pipe
-            task.standardError = Pipe()
-            do { try task.run() } catch { return false }
-            task.waitUntilExit()
-            let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            return out.contains("inet \(tunnelInternalIP)")
-        } else if currentMode == .singbox {
-            let proxyOn = checkProxyOn()
-            return (singboxProcess?.isRunning == true) || proxyOn
-        } else {
-            let proxyOn = checkProxyOn()
-            return (ciadpiProcess?.isRunning == true) || proxyOn
-        }
-    }
-    
-    private func checkProxyOn() -> Bool {
-        let task = createProcess(networksetupPath, args: ["-getsocksfirewallproxy", "Wi-Fi"])
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        try? task.run()
-        task.waitUntilExit()
-        
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        if let out = String(data: data, encoding: .utf8) {
-            return out.contains("Yes")
-        }
-        return false
-    }
-    
-    private func refreshStatus() {
-        guard !isTransitioning else { return }
-        let nowOn = checkTunnelUp()
-        
-        if isOn && !nowOn {
-            LogManager.shared.appendLog("⚠️ Bağlantı kopması algılandı! Otomatik olarak yeniden bağlanılıyor (Self-Healing)...")
-            isTransitioning = true
-            updateIcon()
-            rebuildMenu()
-            
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self = self else { return }
-                if self.currentMode == .dpi {
-                    self.stopDPI()
-                    self.startDPI()
-                } else if self.currentMode == .warp {
-                    self.stopWARP()
-                    self.startWARP()
-                } else {
-                    self.stopSingBox()
-                    self.startSingBox()
-                }
-                
-                DispatchQueue.main.async {
-                    self.isTransitioning = false
-                    self.isOn = self.checkTunnelUp()
-                    self.updateIcon()
-                    self.rebuildMenu()
-                    self.fetchIP()
-                }
-            }
-        } else if nowOn != isOn {
-            isOn = nowOn
-            updateIcon()
-            rebuildMenu()
-            fetchIP()
-        }
+    @objc private func quitApp() {
+        if isOn { EngineManager.shared.stop() }
+        NSApp.terminate(nil)
     }
 
     private func showError(detail: String) {
@@ -728,7 +749,7 @@ final class AppController: NSObject, NSApplicationDelegate {
             alert.runModal()
         }
     }
-    
+
     private func showInfo(detail: String) {
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
@@ -740,40 +761,11 @@ final class AppController: NSObject, NSApplicationDelegate {
             alert.runModal()
         }
     }
-
-    @objc private func showAbout() {
-        if aboutWindow == nil {
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 460, height: 580),
-                styleMask: [.titled, .closable, .fullSizeContentView],
-                backing: .buffered,
-                defer: false
-            )
-            window.center()
-            window.title = "Freenet Hakkında"
-            window.titlebarAppearsTransparent = true
-            window.titleVisibility = .hidden
-            window.contentView = NSHostingView(rootView: AboutView())
-            window.isReleasedWhenClosed = false
-            self.aboutWindow = window
-        }
-        
-        aboutWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    @objc private func quitApp() {
-        if isOn {
-            if currentMode == .dpi { stopDPI() }
-            else if currentMode == .warp { stopWARP() }
-            else { stopSingBox() }
-        }
-        NSApp.terminate(nil)
-    }
 }
 
 let app = NSApplication.shared
 let controller = AppController()
 app.delegate = controller
+// Menubar agent (classic) — shield in status bar like the first working build
 app.setActivationPolicy(.accessory)
 app.run()
