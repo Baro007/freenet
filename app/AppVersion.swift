@@ -3,8 +3,8 @@ import Foundation
 /// Single source of truth for displayed version (must match Info.plist).
 enum AppVersion {
     /// Marketing version. Keep in sync with CFBundleShortVersionString and VERSION file.
-    static let marketing = "1.2.1"
-    static let build = "4"
+    static let marketing = "1.2.2"
+    static let build = "5"
 
     static var display: String { "v\(shortVersion)" }
 

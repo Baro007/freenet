@@ -158,7 +158,7 @@ struct LogicTestsMain {
         expect(parsed?.endpointPort == 2408, "parsed endpoint port 2408")
 
         let targets = WgcfConfigParser.failoverTargets(preferredPort: 500)
-        expect(targets.first == WarpEndpointTarget(host: "162.159.193.1", port: 500), "failover starts with 162.159.193.1:500")
+        expect(targets.first == WarpEndpointTarget(host: "162.159.192.1", port: 500), "failover starts with 162.159.192.1:500")
         expect(targets.contains(WarpEndpointTarget(host: "162.159.192.1", port: 2408)), "failover includes fallback 2408")
 
         if let p = parsed {
@@ -171,12 +171,19 @@ struct LogicTestsMain {
             let obj = (try? JSONSerialization.jsonObject(with: sbWarpJSON.data(using: .utf8)!)) as? [String: Any]
             expect(obj != nil, "SingBoxWarpConfig produces valid JSON")
             expect(sbWarpJSON.contains("\"type\": \"wireguard\""), "contains wireguard endpoint")
-            expect(sbWarpJSON.contains("\"detour\": \"warp-ep\""), "routes DoH inside WARP tunnel")
-            expect(sbWarpJSON.contains("\"94.140.14.14\""), "applies AdGuard DoH inside WARP")
-            expect(sbWarpJSON.contains("\"162.159.193.1\""), "uses IP-literal endpoint (zero bootstrap deadlock)")
+            expect(sbWarpJSON.contains("\"type\": \"udp\""), "uses WG-encrypted UDP DNS inside WARP (no DoH-over-gvisor deadlock)")
+            expect(sbWarpJSON.contains("\"detour\": \"warp-ep\""), "routes DNS inside WARP tunnel")
+            expect(sbWarpJSON.contains("\"94.140.14.14\""), "applies AdGuard DNS inside WARP")
+            expect(sbWarpJSON.contains("\"162.159.192.1\""), "uses IP-literal endpoint (zero bootstrap deadlock)")
             expect(sbWarpJSON.contains("\"listen_port\": 1083"), "listens on dedicated port 1083")
             expect(sbWarpJSON.contains("\"persistent_keepalive_interval\": 25"), "sets keepalive 25s")
+            expect(sbWarpJSON.contains("587") && sbWarpJSON.contains(".whatsapp.net"), "bypasses Mail SMTP/IMAP & WhatsApp pre-sniff")
+            expect(!sbWarpJSON.contains("\"tcp_fast_open\": true"), "no tcp_fast_open on direct-out (prevents SMTP 587 deadlock)")
         }
+
+        let sbFastJSON = SingBoxConfig.makeJSON(listenPort: 1081, fragmentMode: .hybridShield)
+        expect(sbFastJSON.contains("587") && sbFastJSON.contains(".whatsapp.net"), "fast mode bypasses Mail SMTP/IMAP & WhatsApp pre-sniff")
+        expect(!sbFastJSON.contains("\"tcp_fast_open\": true"), "fast mode avoids tcp_fast_open deadlock on server-speaks-first protocols")
     }
 
     static func testChecksum() {

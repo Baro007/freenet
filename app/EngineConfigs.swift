@@ -81,21 +81,36 @@ public enum SingBoxDNSProfile: String, CaseIterable {
 
 /// Pure generator for hardened sing-box 1.13+ non-VPN configuration (unit-tested directly).
 public enum SingBoxConfig {
+    /// Server-speaks-first & non-censored system/mail/messaging ports that must bypass
+    /// protocol sniffing, TLS fragmentation, and WARP IP-reputation blocks:
+    /// - SSH (22), SMTP (25, 465, 587, 2525), POP3 (110, 995), IMAP (143, 993)
+    /// - WhatsApp XMPP/Noise (5222), Apple Push / iMessage / Mail Push (5223)
+    public static let directBypassPorts = [22, 25, 110, 143, 465, 587, 993, 995, 2525, 5222, 5223]
+
+    /// Messaging & Apple push domains that must bypass TLS fragmentation / shared WARP IP blocks.
+    public static let directBypassDomainSuffixes = [
+        ".whatsapp.com", ".whatsapp.net", ".wa.me", "push.apple.com"
+    ]
+
     /// Generates a hardened, VPN-free sing-box config:
     /// 1) `mixed` inbound with `reuse_addr` (SOCKS5 + HTTP/HTTPS CONNECT on localhost)
-    /// 2) Encrypted DoH (Cloudflare Security / AdGuard / Quad9 / Cloudflare / Google) + 4096 cache
-    /// 3) Local DNS bypass (.local/.test/.lan/.home.arpa/localhost) + HTTPS/SVCB stripping (anti-QUIC)
-    /// 4) `hijack-dns` on protocol=dns / port=53 (zero plaintext DNS leaks through proxy)
-    /// 5) Private/LAN bypass both pre- and post-resolve
-    /// 6) QUIC + UDP/443 rejection (instant TCP fallback, no 3-5s stalls)
-    /// 7) Sinkhole & BTK block-page IP rejection (0.0.0.0/8, 195.175.254.2/32)
-    /// 8) 3-mode anti-DPI: TLS Record, TCP Fragment, or Hybrid Shield (chained to local ciadpi)
+    /// 2) Pre-sniff direct bypass for Mail (SMTP/IMAP/POP3), SSH, WhatsApp & Apple Push
+    ///    (prevents server-speaks-first deadlocks and strict mail-server TLS-fragment rejections)
+    /// 3) Encrypted DoH (Cloudflare Security / AdGuard / Quad9 / Cloudflare / Google) + 4096 cache
+    /// 4) Local DNS bypass (.local/.test/.lan/.home.arpa/localhost) + HTTPS/SVCB stripping (anti-QUIC)
+    /// 5) `hijack-dns` on protocol=dns / port=53 (zero plaintext DNS leaks through proxy)
+    /// 6) Private/LAN bypass both pre- and post-resolve
+    /// 7) QUIC + UDP/443 rejection (instant TCP fallback, no 3-5s stalls)
+    /// 8) Sinkhole & BTK block-page IP rejection (0.0.0.0/8, 195.175.254.2/32)
+    /// 9) 3-mode anti-DPI: TLS Record, TCP Fragment, or Hybrid Shield (chained to local ciadpi)
     public static func makeJSON(
         listenPort: Int = 1081,
         fragmentMode: SingBoxFragmentMode = .hybridShield,
         dnsProfile: SingBoxDNSProfile = .cloudflareSecurity,
         ciadpiPort: Int = 1082
     ) -> String {
+        let bypassPortsJSON = directBypassPorts.map(String.init).joined(separator: ", ")
+        let bypassDomainsJSON = directBypassDomainSuffixes.map { "\"\($0)\"" }.joined(separator: ", ")
         let extraOutbound: String
         let bypassRules: String
 
@@ -202,7 +217,6 @@ public enum SingBoxConfig {
             {
               "type": "direct",
               "tag": "direct-out",
-              "tcp_fast_open": true,
               "udp_fragment": true
             }\(extraOutbound)
           ],
@@ -212,6 +226,14 @@ public enum SingBoxConfig {
               "strategy": "ipv4_only"
             },
             "rules": [
+              {
+                "port": [\(bypassPortsJSON)],
+                "outbound": "direct-out"
+              },
+              {
+                "domain_suffix": [\(bypassDomainsJSON)],
+                "outbound": "direct-out"
+              },
               {
                 "inbound": ["mixed-in"],
                 "action": "sniff",
@@ -404,14 +426,14 @@ public enum WgcfConfigParser {
     }
 
     /// Ordered official Cloudflare WARP IP:port targets for sequential failover.
-    /// Prefers alternate 162.159.193.1 + non-2408 ports first to avoid ISP UDP:2408 throttling.
+    /// Prefers 162.159.192.1 + non-2408 ports first (verified fastest across TR ISPs).
     public static func failoverTargets(preferredPort: Int) -> [WarpEndpointTarget] {
         let candidates: [WarpEndpointTarget] = [
-            WarpEndpointTarget(host: "162.159.193.1", port: preferredPort),
             WarpEndpointTarget(host: "162.159.192.1", port: preferredPort),
-            WarpEndpointTarget(host: "162.159.193.1", port: 500),
+            WarpEndpointTarget(host: "162.159.193.1", port: preferredPort),
+            WarpEndpointTarget(host: "162.159.192.1", port: 500),
             WarpEndpointTarget(host: "162.159.192.1", port: 4500),
-            WarpEndpointTarget(host: "162.159.193.1", port: 1701),
+            WarpEndpointTarget(host: "162.159.192.1", port: 1701),
             WarpEndpointTarget(host: "162.159.192.1", port: 2408)
         ]
         var out: [WarpEndpointTarget] = []
@@ -423,7 +445,9 @@ public enum WgcfConfigParser {
 }
 
 /// Pure generator for sing-box 1.13+ native WARP endpoint configuration.
-/// Uses IP-literal WARP endpoints + IP-literal DoH routed inside WARP (zero DNS bootstrap deadlock).
+/// Uses WireGuard-encrypted UDP DNS inside `warp-ep` (avoids sing-box 1.13 DoH-over-gvisor-endpoint
+/// 10s timeout bug while remaining 100% encrypted inside WireGuard) and bypasses Mail (SMTP/IMAP/POP3),
+/// SSH, WhatsApp, and Apple Push BEFORE sniffing so Mail.app & WhatsApp Desktop work reliably.
 public enum SingBoxWarpConfig {
     public static func makeJSON(
         wgcf: WgcfConfig,
@@ -436,6 +460,8 @@ public enum SingBoxWarpConfig {
         let addrJSON = wgcf.addresses
             .map { "\"\(escapeJSON($0))\"" }
             .joined(separator: ", ")
+        let bypassPortsJSON = SingBoxConfig.directBypassPorts.map(String.init).joined(separator: ", ")
+        let bypassDomainsJSON = SingBoxConfig.directBypassDomainSuffixes.map { "\"\($0)\"" }.joined(separator: ", ")
 
         return """
         {
@@ -446,11 +472,10 @@ public enum SingBoxWarpConfig {
           "dns": {
             "servers": [
               {
-                "tag": "doh-warp",
-                "type": "https",
+                "tag": "dns-warp",
+                "type": "udp",
                 "server": "\(dnsProfile.serverIP)",
-                "server_port": 443,
-                "path": "/dns-query",
+                "server_port": 53,
                 "detour": "warp-ep"
               },
               {
@@ -464,7 +489,7 @@ public enum SingBoxWarpConfig {
                 "server": "local"
               }
             ],
-            "final": "doh-warp",
+            "final": "dns-warp",
             "strategy": "ipv4_only",
             "independent_cache": true,
             "cache_capacity": 4096
@@ -500,16 +525,23 @@ public enum SingBoxWarpConfig {
           "outbounds": [
             {
               "type": "direct",
-              "tag": "direct-out",
-              "tcp_fast_open": true
+              "tag": "direct-out"
             }
           ],
           "route": {
             "default_domain_resolver": {
-              "server": "doh-warp",
+              "server": "dns-warp",
               "strategy": "ipv4_only"
             },
             "rules": [
+              {
+                "port": [\(bypassPortsJSON)],
+                "outbound": "direct-out"
+              },
+              {
+                "domain_suffix": [\(bypassDomainsJSON)],
+                "outbound": "direct-out"
+              },
               {
                 "inbound": ["mixed-in"],
                 "action": "sniff",
@@ -555,13 +587,13 @@ public enum SingBoxWarpConfig {
 /// Pure optimizer for classic wg-quick WireGuard configs:
 /// - Tunes MTU (1280 → 1380) for PPPoE 1492 + WireGuard overhead without fragmentation
 /// - Adds PersistentKeepalive = 25 to prevent CGNAT/router UDP mapping drops
-/// - Rewrites Endpoint to alternate WARP IP (162.159.193.1) + selected non-2408 port
+/// - Rewrites Endpoint to preferred WARP IP (162.159.192.1) + selected non-2408 port
 /// - Aligns DNS servers with selected DNS shield profile (malware/ad blocking even in L3 mode)
 /// - Preserves keys, addresses, and AllowedIPs (no IPv6 leak)
 public enum WarpConfigOptimizer {
     public static let optimalMTU = 1380
     public static let defaultKeepalive = 25
-    public static let preferredEndpointHost = "162.159.193.1"
+    public static let preferredEndpointHost = "162.159.192.1"
 
     public static func optimize(
         _ raw: String,

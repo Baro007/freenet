@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://img.shields.io/badge/Platform-macOS%2013.0+%20(Universal)-apple?style=flat-square&logo=apple"><img src="https://img.shields.io/badge/Platform-macOS%2013.0+%20(Universal)-apple?style=flat-square&logo=apple"></a>
-  <a href="https://img.shields.io/badge/Sürüm-1.2.1-orange?style=flat-square"><img src="https://img.shields.io/badge/Sürüm-1.2.1-orange?style=flat-square"></a>
+  <a href="https://img.shields.io/badge/Sürüm-1.2.2-orange?style=flat-square"><img src="https://img.shields.io/badge/Sürüm-1.2.2-orange?style=flat-square"></a>
   <a href="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white"><img src="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white"></a>
   <a href="https://img.shields.io/badge/Lisans-MIT-green?style=flat-square"><img src="https://img.shields.io/badge/Lisans-MIT-green?style=flat-square"></a>
 </p>

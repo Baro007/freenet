@@ -219,16 +219,17 @@ final class WarpEngine: Engine {
         activeEndpoint = nil
     }
 
+    /// Verifies BOTH real DNS resolution AND Cloudflare WARP egress (`warp=on`) via domain query.
     private func verifyWarpTrace(socksPort: Int?) -> Bool {
-        var args = ["-sS", "--max-time", "4"]
+        var args = ["-sS", "--max-time", "5"]
         if let port = socksPort {
             args.append(contentsOf: ["--socks5-hostname", "127.0.0.1:\(port)"])
         } else {
             args.append(contentsOf: ["--noproxy", "*"])
         }
-        args.append("https://1.1.1.1/cdn-cgi/trace")
+        args.append("https://cloudflare.com/cdn-cgi/trace")
         let r = ProcessRunner.captureOutput("/usr/bin/curl", args: args)
-        return r.status == 0 && r.stdout.contains("warp=on")
+        return r.status == 0 && (r.stdout.contains("warp=on") || r.stdout.contains("warp=plus"))
     }
 
     // MARK: - Classic System Tunnel (wg-quick / wireguard-go L3 utun)

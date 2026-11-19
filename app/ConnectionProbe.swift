@@ -76,7 +76,7 @@ enum ConnectionProbe {
         } else {
             args.append(contentsOf: ["--noproxy", "*"])
         }
-        args.append("https://1.1.1.1/cdn-cgi/trace")
+        args.append("https://cloudflare.com/cdn-cgi/trace")
         let r = ProcessRunner.captureOutput("/usr/bin/curl", args: args)
         guard r.status == 0 else {
             return WarpCheck(isWarp: false, ip: nil, colo: nil)
