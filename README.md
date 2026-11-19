@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://img.shields.io/badge/Platform-macOS%2013.0+%20(Universal)-apple?style=flat-square&logo=apple"><img src="https://img.shields.io/badge/Platform-macOS%2013.0+%20(Universal)-apple?style=flat-square&logo=apple"></a>
-  <a href="https://img.shields.io/badge/Version-1.2.0-orange?style=flat-square"><img src="https://img.shields.io/badge/Version-1.2.0-orange?style=flat-square"></a>
+  <a href="https://img.shields.io/badge/Version-1.2.1-orange?style=flat-square"><img src="https://img.shields.io/badge/Version-1.2.1-orange?style=flat-square"></a>
   <a href="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white"><img src="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white"></a>
   <a href="https://img.shields.io/badge/License-MIT-green?style=flat-square"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square"></a>
 </p>
@@ -50,7 +50,7 @@ Freenet does **not** promise "full speed + full anonymity" in a single switch. Y
 - **Universal Binary (`arm64` + `x86_64`)** compiled directly via `swiftc` + `lipo`.
 - **Zero-subprocess monitoring:** Native Darwin `getifaddrs()`, `CFNetworkCopySystemProxySettings()`, and non-blocking POSIX TCP `connect()` — eliminates background polling churn.
 - **Hot-Swap intents:** Switch between Hızlı / Dengeli / Maks. Gizlilik while connected without manual disconnect.
-- **Security & hygiene:** SHA-256 verification (`CHECKSUMS.sha256`), strict `DPIArgsValidator` flag allowlist + mandatory `127.0.0.1` localhost bind, narrow fixed-template sudoers, self-heal, and orphan proxy cleanup.
+- **Security & hygiene:** SHA-256 verification (`CHECKSUMS.sha256`), SHA-256 verified in-app self-updater (GitHub Releases `.zip` + `.sha256`, HTTPS origin allowlist, atomic swap + rollback), strict `DPIArgsValidator` flag allowlist + mandatory `127.0.0.1` localhost bind, narrow fixed-template sudoers, self-heal, and orphan proxy cleanup.
 
 ---
 

@@ -527,17 +527,10 @@ struct AboutView: View {
                     Button("Güncellemeleri Kontrol Et") {
                         updateLine = "Kontrol ediliyor…"
                         UpdateChecker.shared.check { status in
-                            switch status {
-                            case .upToDate(let c):
-                                updateLine = "Güncel (v\(c))"
-                            case .updateAvailable(_, let latest, _, _):
-                                updateLine = "Yeni sürüm: v\(latest)"
-                            case .failed(let m):
-                                updateLine = m
-                            case .checking:
-                                updateLine = "Kontrol ediliyor…"
+                            updateLine = Self.formatUpdateStatus(status)
+                            UpdateChecker.shared.presentAlert(for: status) { st in
+                                updateLine = Self.formatUpdateStatus(st)
                             }
-                            UpdateChecker.shared.presentAlert(for: status)
                         }
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -565,13 +558,19 @@ struct AboutView: View {
         .frame(width: 480, height: 640)
         .onAppear {
             UpdateChecker.shared.check { status in
-                switch status {
-                case .upToDate(let c): updateLine = "Güncel (v\(c))"
-                case .updateAvailable(_, let latest, _, _): updateLine = "Yeni sürüm: v\(latest)"
-                case .failed(let m): updateLine = m
-                case .checking: break
-                }
+                updateLine = Self.formatUpdateStatus(status)
             }
+        }
+    }
+
+    private static func formatUpdateStatus(_ status: UpdateChecker.Status) -> String {
+        switch status {
+        case .checking: return "Kontrol ediliyor…"
+        case .upToDate(let c): return "Güncel (v\(c))"
+        case .updateAvailable(let pkg):
+            return pkg.canAutoInstall ? "Yeni sürüm: v\(pkg.latest) (Otomatik Kurulum Hazır)" : "Yeni sürüm: v\(pkg.latest)"
+        case .installing(let step): return "⏳ \(step)"
+        case .failed(let m): return m
         }
     }
 

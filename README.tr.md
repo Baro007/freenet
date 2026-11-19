@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://img.shields.io/badge/Platform-macOS%2013.0+%20(Universal)-apple?style=flat-square&logo=apple"><img src="https://img.shields.io/badge/Platform-macOS%2013.0+%20(Universal)-apple?style=flat-square&logo=apple"></a>
-  <a href="https://img.shields.io/badge/Sürüm-1.2.0-orange?style=flat-square"><img src="https://img.shields.io/badge/Sürüm-1.2.0-orange?style=flat-square"></a>
+  <a href="https://img.shields.io/badge/Sürüm-1.2.1-orange?style=flat-square"><img src="https://img.shields.io/badge/Sürüm-1.2.1-orange?style=flat-square"></a>
   <a href="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white"><img src="https://img.shields.io/badge/Swift-5-F05138?style=flat-square&logo=swift&logoColor=white"></a>
   <a href="https://img.shields.io/badge/Lisans-MIT-green?style=flat-square"><img src="https://img.shields.io/badge/Lisans-MIT-green?style=flat-square"></a>
 </p>
@@ -50,7 +50,7 @@ Freenet **tek düğmede hem tam hız hem tam anonimlik** vaat etmez. Açık bir 
 - **Universal Binary (`arm64` + `x86_64`)** — Apple Silicon ve Intel Mac'ler için tek paket.
 - **Sıfır alt-süreçli izleme:** `getifaddrs()`, `CFNetworkCopySystemProxySettings()` ve POSIX non-blocking TCP `connect()` ile düşük CPU/pil tüketimi.
 - **Sıcak Mod Geçişi (Hot-Swap):** Bağlıyken bağlantıyı elle kapatmadan niyetler arası anında geçiş.
-- **Güvenlik:** SHA-256 doğrulama (`CHECKSUMS.sha256`), katı `DPIArgsValidator` + zorunlu `127.0.0.1` dinleme, daraltılmış `sudoers`, self-heal ve yetim proxy temizliği.
+- **Güvenlik & Otomatik Güncelleme:** SHA-256 doğrulama (`CHECKSUMS.sha256`), uygulama içi **otomatik güncelleyici** (GitHub Releases `.zip` + `.sha256` doğrulaması, HTTPS alan adı kısıtı, atomik değişim + rollback), katı `DPIArgsValidator` + zorunlu `127.0.0.1` dinleme, daraltılmış `sudoers`, self-heal ve yetim proxy temizliği.
 
 ---
 

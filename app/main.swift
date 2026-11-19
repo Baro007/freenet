@@ -22,7 +22,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var aboutWindow: NSWindow?
 
     private var updateStatusLine = "Güncelleme: kontrol edilmedi"
-    private var updateAvailableURL: URL?
+    private var pendingUpdatePackage: UpdateChecker.UpdatePackage?
     /// Live Tor / connection truth (not just "button ON")
     private var torStatusLine = "Tor: kontrol edilmedi"
     private var torReallyOn = false
@@ -411,9 +411,19 @@ final class AppController: NSObject, NSApplicationDelegate {
         recheck.target = self
         menu.addItem(recheck)
 
-        let updItem = NSMenuItem(title: updateStatusLine, action: nil, keyEquivalent: "")
-        updItem.isEnabled = false
-        menu.addItem(updItem)
+        if let pkg = pendingUpdatePackage {
+            let updItem = NSMenuItem(
+                title: pkg.canAutoInstall ? "⬆ v\(pkg.latest) Hazır — Otomatik Güncelle…" : "⬆ Yeni sürüm: v\(pkg.latest)",
+                action: #selector(triggerPendingUpdate),
+                keyEquivalent: ""
+            )
+            updItem.target = self
+            menu.addItem(updItem)
+        } else {
+            let updItem = NSMenuItem(title: updateStatusLine, action: nil, keyEquivalent: "")
+            updItem.isEnabled = false
+            menu.addItem(updItem)
+        }
         menu.addItem(NSMenuItem.separator())
 
         let stateText = isTransitioning ? "Geçiş yapılıyor…" : (isOn ? "● freenet AÇIK" : "○ freenet kapalı")
@@ -530,25 +540,39 @@ final class AppController: NSObject, NSApplicationDelegate {
         refreshConnectionTruth()
     }
 
+    @objc private func triggerPendingUpdate() {
+        if let pkg = pendingUpdatePackage {
+            UpdateChecker.shared.presentAlert(for: .updateAvailable(pkg)) { [weak self] st in
+                self?.applyUpdateStatus(st, presentAlert: false)
+            }
+        } else {
+            checkForUpdates()
+        }
+    }
+
     private func applyUpdateStatus(_ status: UpdateChecker.Status, presentAlert: Bool) {
         switch status {
         case .checking:
             updateStatusLine = "Güncelleme: kontrol ediliyor…"
-            updateAvailableURL = nil
         case .upToDate(let current):
             updateStatusLine = "Güncel · v\(current)"
-            updateAvailableURL = nil
-        case .updateAvailable(_, let latest, _, let pageURL):
-            updateStatusLine = "⬆ Yeni sürüm: v\(latest)"
-            updateAvailableURL = pageURL
+            pendingUpdatePackage = nil
+        case .updateAvailable(let pkg):
+            updateStatusLine = pkg.canAutoInstall
+                ? "⬆ Yeni sürüm: v\(pkg.latest) (otomatik)"
+                : "⬆ Yeni sürüm: v\(pkg.latest)"
+            pendingUpdatePackage = pkg
+        case .installing(let step):
+            updateStatusLine = "⏳ \(step)"
         case .failed:
             updateStatusLine = "Güncelleme: kontrol edilemedi"
-            updateAvailableURL = nil
         }
         rebuildMenu()
         refreshMainWindowContent()
         if presentAlert {
-            UpdateChecker.shared.presentAlert(for: status)
+            UpdateChecker.shared.presentAlert(for: status) { [weak self] st in
+                self?.applyUpdateStatus(st, presentAlert: false)
+            }
         }
     }
 

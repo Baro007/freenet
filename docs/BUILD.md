@@ -41,6 +41,15 @@ cd app/Resources/bin
 shasum -a 256 -c CHECKSUMS.sha256
 ```
 
+## Packaging a Release (for In-App Auto-Updater)
+
+```bash
+cd app
+./release.sh
+```
+
+Runs all unit tests, builds the Universal Binary (`build/freenet.app`), packages `build/release/freenet-v<VERSION>-macos-universal.zip` via `ditto`, and generates `freenet-v<VERSION>-macos-universal.zip.sha256`. Upload both files to GitHub Releases so Freenet's in-app auto-updater can download, SHA-256 verify, and install updates automatically.
+
 ## Install Script
 
 `install.sh` clones the repository, runs `app/build.sh`, verifies `CHECKSUMS.sha256`, and installs to `/Applications/freenet.app`. Always review scripts before running rather than blindly piping `curl | bash`.

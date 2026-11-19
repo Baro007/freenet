@@ -247,6 +247,49 @@ struct LogicTestsMain {
         let json = AppVersion.parseVERSIONFile("{\"version\":\"2.0.0\",\"notes\":\"hi\",\"url\":\"https://example.com\"}")
         expect(json?.version == "2.0.0", "json VERSION parse")
         expect(json?.notes == "hi", "json notes")
+
+        let sha = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        let manifest = AppVersion.parseVersionManifest("{\"version\":\"2.1.0\",\"sha256\":\"sha256:\(sha)\"}")
+        expect(manifest?.sha256 == sha, "manifest parses sha256 with prefix")
+
+        print("== UpdateSecurity & UpdateReleaseParser ==")
+        expect(UpdateSecurity.isAllowedDownloadURL(URL(string: "https://github.com/Baro007/freenet/releases/download/v1.2.1/freenet.zip")!), "allows github.com/Baro007/freenet")
+        expect(UpdateSecurity.isAllowedDownloadURL(URL(string: "https://objects.githubusercontent.com/github-production-release-asset/123")!), "allows objects.githubusercontent.com")
+        expect(UpdateSecurity.isAllowedDownloadURL(URL(string: "https://release-assets.githubusercontent.com/abc")!), "allows release-assets.githubusercontent.com")
+        expect(!UpdateSecurity.isAllowedDownloadURL(URL(string: "http://github.com/Baro007/freenet/releases/download/v1.2.1/freenet.zip")!), "rejects insecure HTTP")
+        expect(!UpdateSecurity.isAllowedDownloadURL(URL(string: "https://github.com/evil/freenet/releases/download/v1.2.1/freenet.zip")!), "rejects other GitHub repo")
+        expect(!UpdateSecurity.isAllowedDownloadURL(URL(string: "https://evil.example.com/freenet.zip")!), "rejects third-party host")
+
+        expect(UpdateSecurity.parseSHA256Text("\(sha)  freenet-v1.2.1-macos-universal.zip\n") == sha, "parses shasum output")
+        expect(UpdateSecurity.parseSHA256Text("sha256:\(sha.uppercased())") == sha, "parses sha256: prefix")
+        expect(UpdateSecurity.parseSHA256Text("not-a-hash") == nil, "rejects invalid sha256")
+
+        let relJSON = """
+        {
+          "tag_name": "v1.2.1",
+          "html_url": "https://github.com/Baro007/freenet/releases/tag/v1.2.1",
+          "body": "Release notes",
+          "assets": [
+            {
+              "name": "freenet-v1.2.1-macos-universal.zip",
+              "browser_download_url": "https://github.com/Baro007/freenet/releases/download/v1.2.1/freenet-v1.2.1-macos-universal.zip",
+              "digest": "sha256:\(sha)"
+            },
+            {
+              "name": "freenet-v1.2.1-macos-universal.zip.sha256",
+              "browser_download_url": "https://github.com/Baro007/freenet/releases/download/v1.2.1/freenet-v1.2.1-macos-universal.zip.sha256"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+        let parsedRel = UpdateReleaseParser.parseLatestRelease(
+            data: relJSON,
+            fallbackPageURL: URL(string: "https://github.com/Baro007/freenet/releases")!
+        )
+        expect(parsedRel?.tag == "v1.2.1", "parsed release tag v1.2.1")
+        expect(parsedRel?.zipDownloadURL?.lastPathComponent == "freenet-v1.2.1-macos-universal.zip", "parsed zip download URL")
+        expect(parsedRel?.checksumURL?.lastPathComponent == "freenet-v1.2.1-macos-universal.zip.sha256", "parsed sha256 sidecar URL")
+        expect(parsedRel?.digestSHA256 == sha, "parsed asset digest sha256")
     }
 
     static func main() {
